@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import pygame
 from pygame import Vector2
 
 from .config import CarConfig
+
+if TYPE_CHECKING:
+    from .track import Track
 
 
 @dataclass(frozen=True)
@@ -67,12 +71,36 @@ class Car:
         self.heading_deg += control.steering * self.config.max_steer_rate_deg * steer_factor * direction * dt
         self.position += self.forward * self.speed * dt
 
+    def body_samples(self) -> list[Vector2]:
+        """A 7 × 5 sample grid covering the full rectangular chassis."""
+        forward = self.forward
+        right = forward.rotate(90)
+        half_length = self.config.length / 2
+        half_width = self.config.width / 2
+        return [
+            self.position + forward * longitudinal * half_length + right * lateral * half_width
+            for longitudinal in (-1.0, -2 / 3, -1 / 3, 0.0, 1 / 3, 2 / 3, 1.0)
+            for lateral in (-1.0, -0.5, 0.0, 0.5, 1.0)
+        ]
+
+    def push_out_of_track(self, track: "Track", iterations: int = 6) -> Vector2 | None:
+        """Translate the whole car out of the wall using its body footprint."""
+        first_normal: Vector2 | None = None
+        for _ in range(iterations):
+            contact = track.deepest_body_contact(self.body_samples())
+            if contact is None:
+                break
+            if first_normal is None:
+                first_normal = contact.normal
+            # Move the complete chassis just inside the road, not merely a corner.
+            self.position -= contact.normal * (contact.penetration + 0.75)
+        return first_normal
+
     def resolve_collision(self, wall_normal: Vector2) -> float:
-        """Move back onto the road and lose speed according to impact angle.
+        """Apply impact speed response after the chassis has been pushed clear.
 
         Returns an impact value from 0 (grazing) to 1 (head-on).
         """
-        self.position = Vector2(self.previous_position)
         if abs(self.speed) < 0.01:
             return 0.0
 

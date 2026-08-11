@@ -23,13 +23,13 @@ class RacingGame:
         self.evaluator = CheckpointEvaluator()
         self.show_sensors = True
         self.running = True
-        self.progress = ProgressSnapshot(0.0, 0, 0, 1)
+        self.progress = ProgressSnapshot(0.0, 0, 0, 1, 0.0, None)
         self.reset()
 
     def reset(self) -> None:
         self.car.reset(self.track.start_position, self.track.start_heading_deg)
         self.evaluator.reset()
-        self.progress = ProgressSnapshot(0.0, 0, 0, 1)
+        self.progress = ProgressSnapshot(0.0, 0, 0, 1, 0.0, None)
 
     def _handle_events(self) -> None:
         for event in pygame.event.get():
@@ -54,12 +54,9 @@ class RacingGame:
 
     def _update(self, dt: float) -> None:
         self.car.update(self._keyboard_control(), dt)
-        impacts = [point for point in self.car.corners() if not self.track.is_drivable(point)]
-        if impacts:
-            combined_normal = sum((self.track.wall_normal(point) for point in impacts), pygame.Vector2())
-            if combined_normal.length_squared() == 0:
-                combined_normal = self.track.wall_normal(impacts[0])
-            self.car.resolve_collision(combined_normal)
+        collision_normal = self.car.push_out_of_track(self.track)
+        if collision_normal is not None:
+            self.car.resolve_collision(collision_normal)
         self.progress = self.evaluator.update(self.car, self.track, dt)
 
     def _draw(self) -> None:
@@ -70,9 +67,12 @@ class RacingGame:
             self.sensors.draw(self.screen, self.car, readings)
         self.car.draw(self.screen)
 
+        checkpoint_progress = self.progress.checkpoints_passed % len(self.track.checkpoints)
+        last_lap = "--" if self.progress.last_lap_time is None else f"{self.progress.last_lap_time:05.1f}s"
         lines = [
             f"speed {self.car.speed:6.1f}",
-            f"lap {self.progress.laps}  checkpoint {self.progress.next_checkpoint}/{len(self.track.checkpoints) - 1}",
+            f"lap {self.progress.laps}  time {self.progress.current_lap_time:05.1f}s  last {last_lap}",
+            f"checkpoint {checkpoint_progress}/{len(self.track.checkpoints) - 1}",
             "sensors  " + "  ".join(
                 f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
             ),

@@ -15,6 +15,13 @@ class Checkpoint:
     index: int
 
 
+@dataclass(frozen=True)
+class RoadContact:
+    point: Vector2
+    normal: Vector2
+    penetration: float
+
+
 class Track:
     """Image-inspired road network with a primary centerline and a shortcut."""
 
@@ -118,6 +125,19 @@ class Track:
     def wall_normal(self, point: Vector2) -> Vector2:
         normal = point - self.nearest_road_point(point)
         return normal.normalize() if normal.length_squared() else Vector2(1, 0)
+
+    def deepest_body_contact(self, body_points: list[Vector2]) -> RoadContact | None:
+        """Return the most deeply off-road point from the vehicle body."""
+        deepest: RoadContact | None = None
+        for point in body_points:
+            nearest = self.nearest_road_point(point)
+            offset = point - nearest
+            distance = offset.length()
+            penetration = distance - self.road_half_width
+            if penetration > 0 and (deepest is None or penetration > deepest.penetration):
+                normal = offset.normalize() if distance else Vector2(1, 0)
+                deepest = RoadContact(Vector2(point), normal, penetration)
+        return deepest
 
     def _make_checkpoints(self, count: int) -> list[Checkpoint]:
         # Both diagonal choices are valid: there is no checkpoint between their split and merge.

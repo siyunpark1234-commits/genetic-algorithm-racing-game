@@ -46,6 +46,20 @@ class RacingCoreTests(unittest.TestCase):
         self.assertEqual(progress.checkpoints_passed, 1)
         self.assertEqual(progress.next_checkpoint, 2)
 
+    def test_lap_time_is_saved_after_start_checkpoint(self) -> None:
+        evaluator = CheckpointEvaluator()
+        for checkpoint_index in tuple(range(1, len(self.track.checkpoints))) + (0,):
+            checkpoint = self.track.checkpoints[checkpoint_index]
+            midpoint = (checkpoint.inner + checkpoint.outer) / 2
+            along_gate = (checkpoint.outer - checkpoint.inner).normalize()
+            normal = along_gate.rotate(90)
+            self.car.previous_position = midpoint - normal * 10
+            self.car.position = midpoint + normal * 10
+            progress = evaluator.update(self.car, self.track, 0.1)
+        self.assertEqual(progress.laps, 1)
+        self.assertAlmostEqual(progress.last_lap_time or 0.0, 1.6)
+        self.assertEqual(progress.current_lap_time, 0.0)
+
     def test_head_on_collision_slows_more_than_grazing_collision(self) -> None:
         head_on = Car(speed=100, heading_deg=0)
         grazing = Car(speed=100, heading_deg=0)
@@ -75,6 +89,12 @@ class RacingCoreTests(unittest.TestCase):
         car = Car(speed=100, heading_deg=20)
         car.resolve_collision(Vector2(0, 1))
         self.assertEqual(car.heading_deg, 20)
+
+    def test_body_collision_pushes_entire_car_back_onto_road(self) -> None:
+        self.car.reset(Vector2(500, 555), 0)
+        normal = self.car.push_out_of_track(self.track)
+        self.assertIsNotNone(normal)
+        self.assertIsNone(self.track.deepest_body_contact(self.car.body_samples()))
 
     def test_sensor_reaches_track_wall(self) -> None:
         reading = ForwardSensorArray().sense(self.car, self.track)[2]
