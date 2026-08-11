@@ -76,7 +76,6 @@ class RacingGame:
             "sensors  " + "  ".join(
                 f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
             ),
-            "WASD/arrows: drive   R: reset   V: sensors",
         ]
         if self.car.collision_intensity > 0:
             lines.append(f"IMPACT {self.car.collision_intensity * 100:.0f}%")
