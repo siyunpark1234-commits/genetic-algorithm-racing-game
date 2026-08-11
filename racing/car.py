@@ -81,7 +81,10 @@ class Car:
         impact = abs(travel_direction.dot(normal))
         stop_threshold = math.sin(math.radians(self.config.collision_stop_angle_deg))
         if impact >= stop_threshold:
-            self.speed = 0.0
+            # A short reverse impulse separates the car from the wall instead
+            # of leaving its collision box pressed against the boundary.
+            rebound = max(38.0, min(72.0, abs(self.speed) * 0.24))
+            self.speed = -math.copysign(rebound, self.speed)
         else:
             # Shallow contact scrubs speed without changing the car's heading.
             severity = impact / stop_threshold

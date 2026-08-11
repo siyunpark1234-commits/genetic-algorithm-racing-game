@@ -80,7 +80,7 @@ class RacingGame:
         ]
         if self.car.collision_intensity > 0:
             lines.append(f"IMPACT {self.car.collision_intensity * 100:.0f}%")
-        hud_x, hud_y = 230, 155
+        hud_x, hud_y = 350, 455
         for index, text in enumerate(lines):
             color = (205, 80, 20) if text.startswith("IMPACT") else (28, 31, 36)
             self.screen.blit(self.font.render(text, True, color), (hud_x, hud_y + index * 28))

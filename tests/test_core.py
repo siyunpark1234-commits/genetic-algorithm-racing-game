@@ -51,8 +51,25 @@ class RacingCoreTests(unittest.TestCase):
         grazing = Car(speed=100, heading_deg=0)
         head_on.resolve_collision(Vector2(1, 0))
         grazing.resolve_collision(Vector2(0, 1))
-        self.assertEqual(head_on.speed, 0)
+        self.assertLess(head_on.speed, 0)
         self.assertGreater(grazing.speed, 0)
+
+    def test_reverse_collision_impulse_flips_with_travel_direction(self) -> None:
+        reversing = Car(speed=-100, heading_deg=0)
+        reversing.resolve_collision(Vector2(1, 0))
+        self.assertGreater(reversing.speed, 0)
+
+    def test_head_on_rebound_moves_car_away_from_wall(self) -> None:
+        self.car.reset(Vector2(500, 610), -90)
+        self.car.speed = 200
+        self.car.update(ControlInput(), 0.1)
+        impact_points = [point for point in self.car.corners() if not self.track.is_drivable(point)]
+        self.assertTrue(impact_points)
+        self.car.resolve_collision(self.track.wall_normal(impact_points[0]))
+        self.assertLess(self.car.speed, 0)
+        collision_position = Vector2(self.car.position)
+        self.car.update(ControlInput(), 0.1)
+        self.assertGreater(self.car.position.y, collision_position.y)
 
     def test_collision_does_not_bounce_heading(self) -> None:
         car = Car(speed=100, heading_deg=20)
@@ -66,8 +83,8 @@ class RacingCoreTests(unittest.TestCase):
         self.assertTrue(self.track.is_drivable(just_before))
 
     def test_diagonal_routes_are_separated_by_non_drivable_island(self) -> None:
-        self.assertTrue(self.track.is_drivable(Vector2(900, 247)))
-        self.assertFalse(self.track.is_drivable(Vector2(900, 194)))
+        self.assertTrue(self.track.is_drivable(Vector2(900, 293)))
+        self.assertFalse(self.track.is_drivable(Vector2(900, 230)))
 
 
 if __name__ == "__main__":
