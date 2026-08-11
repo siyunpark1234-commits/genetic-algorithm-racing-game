@@ -58,6 +58,7 @@ class Track:
             (self._smooth_path(raw_centerline, closed=True, iterations=4), True),
             (self._smooth_path(raw_shortcut, closed=False, iterations=4), False),
         ]
+        self._drive_mask = self._build_drive_mask()
         self._segments = self._build_segments()
         self.checkpoints = self._make_checkpoints(checkpoint_count)
 
@@ -91,6 +92,13 @@ class Track:
                 segments.append((Vector2(points[-1]), Vector2(points[0])))
         return segments
 
+    def _build_drive_mask(self) -> pygame.mask.Mask:
+        """Pre-render the static road into an O(1) drivable-area lookup."""
+        surface = pygame.Surface((self.config.width, self.config.height), pygame.SRCALPHA)
+        for points, closed in self._render_roads:
+            self._draw_round_path(surface, points, closed, (255, 255, 255, 255), round(self.road_width))
+        return pygame.mask.from_surface(surface)
+
     @property
     def start_position(self) -> Vector2:
         return Vector2(900, 610)
@@ -120,7 +128,8 @@ class Track:
         return nearest
 
     def is_drivable(self, point: Vector2) -> bool:
-        return (point - self.nearest_road_point(point)).length_squared() <= self.road_half_width**2
+        x, y = round(point.x), round(point.y)
+        return 0 <= x < self.config.width and 0 <= y < self.config.height and bool(self._drive_mask.get_at((x, y)))
 
     def wall_normal(self, point: Vector2) -> Vector2:
         normal = point - self.nearest_road_point(point)
@@ -130,6 +139,8 @@ class Track:
         """Return the most deeply off-road point from the vehicle body."""
         deepest: RoadContact | None = None
         for point in body_points:
+            if self.is_drivable(point):
+                continue
             nearest = self.nearest_road_point(point)
             offset = point - nearest
             distance = offset.length()

@@ -7,8 +7,10 @@ from pygame import Vector2
 from racing.car import Car, ControlInput
 from racing.config import GameConfig
 from racing.evaluation import CheckpointEvaluator
+from racing.evolution import EpisodeResult, EvolutionTrainer
 from racing.ga_config import GeneticAlgorithmConfig
 from racing.geometry import segments_intersect
+from racing.neural import NetworkArchitecture, NeuralNetwork
 from racing.sensors import ForwardSensorArray
 from racing.track import Track
 
@@ -42,6 +44,36 @@ class GeneticConfigTests(unittest.TestCase):
                 "population_size": "10",
                 "elite_count": "10",
             })
+
+
+class EvolutionTests(unittest.TestCase):
+    def test_network_genome_has_expected_inputs_and_controls(self) -> None:
+        architecture = NetworkArchitecture()
+        network = NeuralNetwork([0.0] * architecture.genome_length, architecture)
+        control = network.control((0.1, 0.2, 0.3, 0.4, 0.5, 0.0))
+        self.assertEqual(control.steering, 0.0)
+        self.assertEqual(control.throttle, 0.0)
+        self.assertEqual(control.brake, 0.0)
+
+    def test_generation_evolves_and_preserves_population_size(self) -> None:
+        track = Track(GameConfig())
+        settings = GeneticAlgorithmConfig(population_size=4, elite_count=1)
+        trainer = EvolutionTrainer(track, settings, seed=1)
+        for index, agent in enumerate(trainer.agents):
+            agent.done = True
+            agent.result = EpisodeResult(float(index), index / 4, 10.0, index, False, index)
+        trainer._finish_generation()
+        self.assertEqual(trainer.generation, 2)
+        self.assertEqual(len(trainer.population), 4)
+        self.assertEqual(len(trainer.agents), 4)
+
+    def test_agents_advance_into_a_new_generation(self) -> None:
+        track = Track(GameConfig())
+        settings = GeneticAlgorithmConfig(population_size=4, elite_count=1)
+        trainer = EvolutionTrainer(track, settings, seed=7)
+        trainer.advance(1000)
+        self.assertGreater(trainer.generation, 1)
+        self.assertIsNotNone(trainer.last_summary)
 
     def test_at_least_one_fitness_weight_is_required(self) -> None:
         with self.assertRaises(ValueError):

@@ -7,6 +7,7 @@ import pygame
 from .car import Car, ControlInput
 from .config import GameConfig
 from .evaluation import CheckpointEvaluator, ProgressSnapshot
+from .evolution import EvolutionTrainer
 from .ga_config import GeneticAlgorithmConfig
 from .sensors import ForwardSensorArray
 from .track import Track
@@ -38,6 +39,7 @@ class RacingGame:
         self.current_screen = Screen.MODE_SELECT
         self.control_mode: str | None = None
         self.ga_config = GeneticAlgorithmConfig()
+        self.trainer: EvolutionTrainer | None = None
         self.ga_fields = self._config_to_fields(self.ga_config)
         self.active_field: str | None = None
         self.config_error = ""
@@ -84,6 +86,7 @@ class RacingGame:
         self.config_error = ""
         self.active_field = None
         self.control_mode = "ai"
+        self.trainer = EvolutionTrainer(self.track, self.ga_config)
         self.current_screen = Screen.RACE
         self.reset()
 
@@ -114,6 +117,7 @@ class RacingGame:
         direct_button, ai_button = self._menu_buttons()
         if direct_button.collidepoint(event.pos):
             self.control_mode = "direct"
+            self.trainer = None
             self.current_screen = Screen.RACE
             self.reset()
         elif ai_button.collidepoint(event.pos):
@@ -169,6 +173,9 @@ class RacingGame:
         )
 
     def _update(self, dt: float) -> None:
+        if self.control_mode == "ai" and self.trainer is not None:
+            self.trainer.advance(steps=4)
+            return
         control = self._keyboard_control() if self.control_mode == "direct" else ControlInput()
         self.car.update(control, dt)
         collision_normal = self.car.push_out_of_track(self.track)
@@ -198,7 +205,7 @@ class RacingGame:
     def _draw_ai_setup(self) -> None:
         self.screen.fill((232, 236, 240))
         title = self.title_font.render("AI SETTINGS", True, (28, 31, 36))
-        note = self.small_font.render("These settings will be used when GA training is added.", True, (75, 80, 88))
+        note = self.small_font.render("These settings control the genetic training run.", True, (75, 80, 88))
         self.screen.blit(title, title.get_rect(center=(self.config.width / 2, 92)))
         self.screen.blit(note, note.get_rect(center=(self.config.width / 2, 130)))
         for key, label, rect in self._field_layout():
@@ -220,30 +227,50 @@ class RacingGame:
     def _draw_race(self) -> None:
         self.screen.fill(self.config.background_color)
         self.track.draw(self.screen)
-        readings = self.sensors.sense(self.car, self.track)
+        if self.control_mode == "ai" and self.trainer is not None:
+            observed_agent = self.trainer.display_agent
+            car = observed_agent.car
+            sensor_array = observed_agent.sensors
+        else:
+            observed_agent = None
+            car = self.car
+            sensor_array = self.sensors
+        readings = sensor_array.sense(car, self.track)
         if self.show_sensors:
-            self.sensors.draw(self.screen, self.car, readings)
-        self.car.draw(self.screen)
+            sensor_array.draw(self.screen, car, readings)
+        car.draw(self.screen)
 
-        checkpoint_progress = self.progress.checkpoints_passed % len(self.track.checkpoints)
-        last_lap = "--" if self.progress.last_lap_time is None else f"{self.progress.last_lap_time:05.1f}s"
-        lines = [
-            f"{self.control_mode.upper() if self.control_mode else '--'}  |  speed {self.car.speed:5.1f}",
-            f"lap {self.progress.laps}  time {self.progress.current_lap_time:05.1f}s  last {last_lap}",
-            f"checkpoint {checkpoint_progress}/{len(self.track.checkpoints) - 1}",
-            "sensors " + " ".join(
-                f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
-            ),
-        ]
-        if self.control_mode == "ai":
-            lines.extend((
-                f"GA setup  pop {self.ga_config.population_size}  elite {self.ga_config.elite_count}",
+        if observed_agent is not None and self.trainer is not None:
+            lines = [
+                f"AI  |  generation {self.trainer.generation}  live {self.trainer.active_count}/{self.ga_config.population_size}",
+                f"leader speed {car.speed:5.1f}  cp {observed_agent.checkpoints_passed}/{len(self.track.checkpoints) - 1}",
+                f"time {observed_agent.elapsed:05.1f}s  collisions {observed_agent.collisions}",
+                "sensors " + " ".join(
+                    f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
+                ),
+                f"GA  pop {self.ga_config.population_size}  elite {self.ga_config.elite_count}  mutation {self.ga_config.mutation_rate:.2f}",
                 "fitness  completion "
                 f"{self.ga_config.completion_weight:.2f}  time {self.ga_config.time_weight:.2f}  "
                 f"collision {self.ga_config.collision_weight:.2f}",
-            ))
-        if self.car.collision_intensity > 0:
-            lines.append(f"IMPACT {self.car.collision_intensity * 100:.0f}%")
+            ]
+            if self.trainer.last_summary is not None:
+                lines.append(
+                    f"last gen best {self.trainer.last_summary.best_fitness:.3f}  "
+                    f"mean {self.trainer.last_summary.mean_fitness:.3f}"
+                )
+        else:
+            checkpoint_progress = self.progress.checkpoints_passed % len(self.track.checkpoints)
+            last_lap = "--" if self.progress.last_lap_time is None else f"{self.progress.last_lap_time:05.1f}s"
+            lines = [
+                f"DIRECT  |  speed {car.speed:5.1f}",
+                f"lap {self.progress.laps}  time {self.progress.current_lap_time:05.1f}s  last {last_lap}",
+                f"checkpoint {checkpoint_progress}/{len(self.track.checkpoints) - 1}",
+                "sensors " + " ".join(
+                    f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
+                ),
+            ]
+        if car.collision_intensity > 0:
+            lines.append(f"IMPACT {car.collision_intensity * 100:.0f}%")
         panel = pygame.Rect(625, 405, 360, 155)
         panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
         panel_surface.fill((248, 250, 252, 224))
