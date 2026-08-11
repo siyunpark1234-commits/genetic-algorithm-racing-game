@@ -23,7 +23,9 @@ class GeneticConfigTests(unittest.TestCase):
     def test_settings_parse_and_validate(self) -> None:
         config = GeneticAlgorithmConfig.from_fields({
             "mutation_rate": "0.08",
-            "weight_scale": "1.5",
+            "completion_weight": "1.5",
+            "time_weight": "0.4",
+            "collision_weight": "0.2",
             "population_size": "40",
             "elite_count": "5",
         })
@@ -34,9 +36,22 @@ class GeneticConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             GeneticAlgorithmConfig.from_fields({
                 "mutation_rate": "0.05",
-                "weight_scale": "1",
+                "completion_weight": "1",
+                "time_weight": "0.3",
+                "collision_weight": "0.2",
                 "population_size": "10",
                 "elite_count": "10",
+            })
+
+    def test_at_least_one_fitness_weight_is_required(self) -> None:
+        with self.assertRaises(ValueError):
+            GeneticAlgorithmConfig.from_fields({
+                "mutation_rate": "0.05",
+                "completion_weight": "0",
+                "time_weight": "0",
+                "collision_weight": "0",
+                "population_size": "10",
+                "elite_count": "2",
             })
 
 

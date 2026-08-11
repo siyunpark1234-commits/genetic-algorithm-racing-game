@@ -27,6 +27,7 @@ class RacingGame:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 28)
         self.small_font = pygame.font.Font(None, 22)
+        self.telemetry_font = pygame.font.Font(None, 18)
         self.title_font = pygame.font.Font(None, 52)
         self.track = Track(self.config)
         self.car = Car()
@@ -47,7 +48,9 @@ class RacingGame:
     def _config_to_fields(config: GeneticAlgorithmConfig) -> dict[str, str]:
         return {
             "mutation_rate": str(config.mutation_rate),
-            "weight_scale": str(config.weight_scale),
+            "completion_weight": str(config.completion_weight),
+            "time_weight": str(config.time_weight),
+            "collision_weight": str(config.collision_weight),
             "population_size": str(config.population_size),
             "elite_count": str(config.elite_count),
         }
@@ -63,11 +66,13 @@ class RacingGame:
     def _field_layout(self) -> list[tuple[str, str, pygame.Rect]]:
         labels = [
             ("mutation_rate", "Mutation rate (0-1)"),
-            ("weight_scale", "Weight scale"),
+            ("completion_weight", "Completion weight"),
+            ("time_weight", "Time weight"),
+            ("collision_weight", "Collision weight"),
             ("population_size", "Population size"),
             ("elite_count", "Elite count"),
         ]
-        return [(key, label, pygame.Rect(590, 205 + index * 66, 180, 38))
+        return [(key, label, pygame.Rect(590, 175 + index * 51, 180, 36))
                 for index, (key, label) in enumerate(labels)]
 
     def _start_ai_mode(self) -> None:
@@ -116,8 +121,8 @@ class RacingGame:
             self.config_error = ""
 
     def _handle_ai_setup_event(self, event: pygame.event.Event) -> None:
-        start_button = pygame.Rect(590, 495, 180, 48)
-        back_button = pygame.Rect(390, 495, 160, 48)
+        start_button = pygame.Rect(590, 505, 180, 48)
+        back_button = pygame.Rect(390, 505, 160, 48)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for key, _, rect in self._field_layout():
                 if rect.collidepoint(event.pos):
@@ -194,8 +199,8 @@ class RacingGame:
         self.screen.fill((232, 236, 240))
         title = self.title_font.render("AI SETTINGS", True, (28, 31, 36))
         note = self.small_font.render("These settings will be used when GA training is added.", True, (75, 80, 88))
-        self.screen.blit(title, title.get_rect(center=(self.config.width / 2, 115)))
-        self.screen.blit(note, note.get_rect(center=(self.config.width / 2, 152)))
+        self.screen.blit(title, title.get_rect(center=(self.config.width / 2, 92)))
+        self.screen.blit(note, note.get_rect(center=(self.config.width / 2, 130)))
         for key, label, rect in self._field_layout():
             text = self.font.render(label, True, (35, 40, 46))
             self.screen.blit(text, (315, rect.y + 5))
@@ -204,13 +209,13 @@ class RacingGame:
             pygame.draw.rect(self.screen, (47, 111, 173) if key == self.active_field else (105, 112, 120), rect, 2, border_radius=5)
             value = self.font.render(self.ga_fields[key], True, (25, 30, 36))
             self.screen.blit(value, (rect.x + 10, rect.y + 6))
-        self._draw_button(pygame.Rect(390, 495, 160, 48), "BACK")
-        self._draw_button(pygame.Rect(590, 495, 180, 48), "START AI", emphasized=True)
+        self._draw_button(pygame.Rect(390, 505, 160, 48), "BACK")
+        self._draw_button(pygame.Rect(590, 505, 180, 48), "START AI", emphasized=True)
         if self.config_error:
             error = self.small_font.render(self.config_error, True, (185, 48, 42))
-            self.screen.blit(error, error.get_rect(center=(self.config.width / 2, 570)))
+            self.screen.blit(error, error.get_rect(center=(self.config.width / 2, 580)))
         hint = self.small_font.render("Click a field to edit. Tab: next field. Enter: start.", True, (75, 80, 88))
-        self.screen.blit(hint, hint.get_rect(center=(self.config.width / 2, 620)))
+        self.screen.blit(hint, hint.get_rect(center=(self.config.width / 2, 630)))
 
     def _draw_race(self) -> None:
         self.screen.fill(self.config.background_color)
@@ -223,24 +228,31 @@ class RacingGame:
         checkpoint_progress = self.progress.checkpoints_passed % len(self.track.checkpoints)
         last_lap = "--" if self.progress.last_lap_time is None else f"{self.progress.last_lap_time:05.1f}s"
         lines = [
-            f"mode {self.control_mode.upper() if self.control_mode else '--'}",
-            f"speed {self.car.speed:6.1f}",
+            f"{self.control_mode.upper() if self.control_mode else '--'}  |  speed {self.car.speed:5.1f}",
             f"lap {self.progress.laps}  time {self.progress.current_lap_time:05.1f}s  last {last_lap}",
             f"checkpoint {checkpoint_progress}/{len(self.track.checkpoints) - 1}",
-            "sensors  " + "  ".join(
+            "sensors " + " ".join(
                 f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
             ),
         ]
         if self.control_mode == "ai":
-            lines.append(
-                f"GA pending  pop {self.ga_config.population_size}  elite {self.ga_config.elite_count}"
-            )
+            lines.extend((
+                f"GA setup  pop {self.ga_config.population_size}  elite {self.ga_config.elite_count}",
+                "fitness  completion "
+                f"{self.ga_config.completion_weight:.2f}  time {self.ga_config.time_weight:.2f}  "
+                f"collision {self.ga_config.collision_weight:.2f}",
+            ))
         if self.car.collision_intensity > 0:
             lines.append(f"IMPACT {self.car.collision_intensity * 100:.0f}%")
-        hud_x, hud_y = 350, 430
+        panel = pygame.Rect(625, 405, 360, 155)
+        panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
+        panel_surface.fill((248, 250, 252, 224))
+        pygame.draw.rect(panel_surface, (125, 132, 140, 175), panel_surface.get_rect(), 1, border_radius=6)
+        self.screen.blit(panel_surface, panel.topleft)
+        hud_x, hud_y = panel.x + 10, panel.y + 9
         for index, text in enumerate(lines):
             color = (205, 80, 20) if text.startswith("IMPACT") else (28, 31, 36)
-            self.screen.blit(self.font.render(text, True, color), (hud_x, hud_y + index * 28))
+            self.screen.blit(self.telemetry_font.render(text, True, color), (hud_x, hud_y + index * 19))
 
     def _draw(self) -> None:
         if self.current_screen is Screen.MODE_SELECT:

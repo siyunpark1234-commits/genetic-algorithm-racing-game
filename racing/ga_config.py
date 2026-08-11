@@ -8,15 +8,20 @@ class GeneticAlgorithmConfig:
     """User-selected settings consumed by the future GA training loop."""
 
     mutation_rate: float = 0.05
-    weight_scale: float = 1.0
+    completion_weight: float = 1.0
+    time_weight: float = 0.3
+    collision_weight: float = 0.2
     population_size: int = 30
     elite_count: int = 4
 
     def validate(self) -> str | None:
         if not 0.0 <= self.mutation_rate <= 1.0:
             return "Mutation rate must be between 0 and 1."
-        if self.weight_scale <= 0:
-            return "Weight scale must be greater than 0."
+        weights = (self.completion_weight, self.time_weight, self.collision_weight)
+        if any(weight < 0 for weight in weights):
+            return "Fitness weights must be 0 or greater."
+        if sum(weights) == 0:
+            return "At least one fitness weight must be greater than 0."
         if self.population_size < 2:
             return "Population must be at least 2."
         if not 1 <= self.elite_count < self.population_size:
@@ -28,7 +33,9 @@ class GeneticAlgorithmConfig:
         try:
             config = cls(
                 mutation_rate=float(fields["mutation_rate"]),
-                weight_scale=float(fields["weight_scale"]),
+                completion_weight=float(fields["completion_weight"]),
+                time_weight=float(fields["time_weight"]),
+                collision_weight=float(fields["collision_weight"]),
                 population_size=int(fields["population_size"]),
                 elite_count=int(fields["elite_count"]),
             )
