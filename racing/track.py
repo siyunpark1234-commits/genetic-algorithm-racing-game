@@ -22,7 +22,7 @@ class Track:
         self.config = config
         self.road_width = 68.0
         self.road_half_width = self.road_width / 2
-        self.centerline = [
+        raw_centerline = [
             Vector2(1040, 610), Vector2(820, 610), Vector2(560, 610), Vector2(300, 610),
             Vector2(225, 609), Vector2(192, 598), Vector2(168, 575), Vector2(156, 545),
             Vector2(155, 485), Vector2(164, 454), Vector2(186, 429), Vector2(218, 415),
@@ -34,15 +34,47 @@ class Track:
             Vector2(820, 95), Vector2(842, 113), Vector2(1023, 286), Vector2(1038, 315),
             Vector2(1040, 455), Vector2(1040, 565),
         ]
-        self.shortcut = [
+        raw_shortcut = [
             Vector2(720, 89), Vector2(750, 120), Vector2(1010, 420), Vector2(1040, 455)
         ]
+        # Corner-cutting creates a continuous curve while preserving the
+        # reference layout's long straights and broad hairpins.
+        self.centerline = self._smooth_path(raw_centerline, closed=True)
+        self.shortcut = self._smooth_path(raw_shortcut, closed=False, iterations=2)
         self._roads: list[tuple[list[Vector2], bool]] = [
             (self.centerline, True),
             (self.shortcut, False),
         ]
+        # Rendering gets denser samples than physics: visually smooth edges
+        # without making every raycast inspect hundreds of extra segments.
+        self._render_roads: list[tuple[list[Vector2], bool]] = [
+            (self._smooth_path(raw_centerline, closed=True, iterations=4), True),
+            (self._smooth_path(raw_shortcut, closed=False, iterations=4), False),
+        ]
         self._segments = self._build_segments()
         self.checkpoints = self._make_checkpoints(checkpoint_count)
+
+    @staticmethod
+    def _smooth_path(points: list[Vector2], closed: bool, iterations: int = 2) -> list[Vector2]:
+        """Round a polyline with Chaikin corner cutting.
+
+        The resulting samples are used for both rendering and collision, so
+        the visible road edge and drivable area stay in sync.
+        """
+        smoothed = [Vector2(point) for point in points]
+        for _ in range(iterations):
+            pairs = list(zip(smoothed, smoothed[1:]))
+            if closed:
+                pairs.append((smoothed[-1], smoothed[0]))
+            next_points: list[Vector2] = []
+            if not closed:
+                next_points.append(Vector2(smoothed[0]))
+            for start, end in pairs:
+                next_points.extend((start.lerp(end, 0.25), start.lerp(end, 0.75)))
+            if not closed:
+                next_points.append(Vector2(smoothed[-1]))
+            smoothed = next_points
+        return smoothed
 
     def _build_segments(self) -> list[tuple[Vector2, Vector2]]:
         segments: list[tuple[Vector2, Vector2]] = []
@@ -108,6 +140,8 @@ class Track:
     def _draw_round_path(surface: pygame.Surface, points: list[Vector2], closed: bool,
                          color: tuple[int, int, int], width: int) -> None:
         pygame.draw.lines(surface, color, closed, points, width)
+        # The path was already densely smoothed above, so these overlapping
+        # stamps round the rasterized joins without the old coarse bulges.
         for point in points:
             pygame.draw.circle(surface, color, point, width // 2)
 
@@ -156,10 +190,10 @@ class Track:
             surface.blit(label, center + Vector2(5, 4))
 
     def draw(self, surface: pygame.Surface) -> None:
-        for points, closed in self._roads:
+        for points, closed in self._render_roads:
             self._draw_round_path(surface, points, closed, self.config.road_edge_color,
                                   round(self.road_width + 7))
-        for points, closed in self._roads:
+        for points, closed in self._render_roads:
             self._draw_round_path(surface, points, closed, self.config.road_color,
                                   round(self.road_width))
         self._draw_checkpoints(surface)
