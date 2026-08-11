@@ -4,7 +4,7 @@ import random
 from dataclasses import dataclass
 
 from .car import Car
-from .config import CarConfig
+from .config import CarConfig, SensorConfig
 from .ga_config import GeneticAlgorithmConfig
 from .geometry import segments_intersect
 from .neural import NetworkArchitecture, NeuralNetwork
@@ -16,6 +16,7 @@ SIMULATION_DT = 1.0 / 30.0
 EPISODE_TIME_LIMIT = 30.0
 NO_PROGRESS_LIMIT = 10.0
 COLLISION_COUNT_COOLDOWN = 0.25
+TRAINING_SENSOR_STEP = 6.0
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,10 @@ class RacingAgent:
         self.track = track
         self.network = NeuralNetwork(genome, architecture)
         self.car = Car()
-        self.sensors = ForwardSensorArray()
+        # Training evaluates hundreds of cars per tick. A coarser march is
+        # refined at the wall by the sensor's binary search, preserving useful
+        # distance readings while substantially reducing raycast work.
+        self.sensors = ForwardSensorArray(SensorConfig(step=TRAINING_SENSOR_STEP))
         self.next_checkpoint = 1
         self.checkpoints_passed = 0
         self.elapsed = 0.0

@@ -103,6 +103,18 @@ class EvolutionTests(unittest.TestCase):
         self.assertEqual(config.seed, 123456)
         self.assertEqual(config.time_scale, 4)
 
+    def test_max_time_scale_is_valid(self) -> None:
+        config = GeneticAlgorithmConfig.from_fields({
+            "mutation_rate": "0.05",
+            "completion_weight": "1",
+            "time_weight": "0.3",
+            "collision_weight": "0.2",
+            "population_size": "10",
+            "elite_count": "2",
+            "time_scale": "0",
+        })
+        self.assertEqual(config.time_scale, 0)
+
 
 class RacingCoreTests(unittest.TestCase):
     def setUp(self) -> None:

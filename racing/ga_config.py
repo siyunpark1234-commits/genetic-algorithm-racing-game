@@ -34,8 +34,8 @@ class GeneticAlgorithmConfig:
             return "Seed mode must be random or fixed."
         if self.seed_mode == "fixed" and self.seed is None:
             return "Enter a seed value for fixed mode."
-        if self.time_scale not in (1, 2, 4, 8):
-            return "Time scale must be 1x, 2x, 4x, or 8x."
+        if self.time_scale not in (0, 1, 4, 16, 64):
+            return "Time scale must be 1x, 4x, 16x, 64x, or MAX."
         return None
 
     @classmethod

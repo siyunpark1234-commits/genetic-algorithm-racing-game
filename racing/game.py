@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import time
 from enum import Enum, auto
 
 import pygame
@@ -169,7 +170,7 @@ class RacingGame:
                 self.ga_fields["render_all_agents"] = "false" if current == "true" else "true"
                 return
             if self._time_scale_toggle_rect().collidepoint(event.pos):
-                scales = (1, 2, 4, 8)
+                scales = (1, 4, 16, 64, 0)
                 current_scale = int(self.ga_fields["time_scale"])
                 self.ga_fields["time_scale"] = str(scales[(scales.index(current_scale) + 1) % len(scales)])
                 return
@@ -215,11 +216,18 @@ class RacingGame:
 
     def _update(self, dt: float) -> None:
         if self.control_mode == "ai" and self.trainer is not None:
-            self.training_time_accumulator += dt * self.ga_config.time_scale
-            steps = int(self.training_time_accumulator / SIMULATION_DT)
-            if steps:
-                self.trainer.advance(steps=steps)
-                self.training_time_accumulator -= steps * SIMULATION_DT
+            if self.ga_config.time_scale == 0:
+                # Spend nearly a full frame budget training, but return often
+                # enough to keep the window responsive to input and redraws.
+                deadline = time.perf_counter() + 0.020
+                while time.perf_counter() < deadline:
+                    self.trainer.advance(steps=1)
+            else:
+                self.training_time_accumulator += dt * self.ga_config.time_scale
+                steps = int(self.training_time_accumulator / SIMULATION_DT)
+                if steps:
+                    self.trainer.advance(steps=steps)
+                    self.training_time_accumulator -= steps * SIMULATION_DT
             return
         control = self._keyboard_control() if self.control_mode == "direct" else ControlInput()
         self.car.update(control, dt)
@@ -280,8 +288,9 @@ class RacingGame:
         self._draw_button(self._agent_view_toggle_rect(), "ALL AGENTS" if show_all else "BEST ONLY", emphasized=show_all)
         speed_label = self.font.render("Training speed", True, (35, 40, 46))
         self.screen.blit(speed_label, (315, 506))
-        speed = self.ga_fields["time_scale"]
-        self._draw_button(self._time_scale_toggle_rect(), f"{speed}x", emphasized=int(speed) > 1)
+        speed = int(self.ga_fields["time_scale"])
+        speed_label_text = "MAX" if speed == 0 else f"{speed}x"
+        self._draw_button(self._time_scale_toggle_rect(), speed_label_text, emphasized=speed != 1)
         self._draw_button(pygame.Rect(390, 553, 160, 44), "BACK")
         self._draw_button(pygame.Rect(590, 553, 180, 44), "START AI", emphasized=True)
         if self.config_error:
@@ -312,7 +321,8 @@ class RacingGame:
 
         if observed_agent is not None and self.trainer is not None:
             lines = [
-                f"AI  |  generation {self.trainer.generation}  live {self.trainer.active_count}/{self.ga_config.population_size}  {self.ga_config.time_scale}x",
+                f"AI  |  generation {self.trainer.generation}  live {self.trainer.active_count}/{self.ga_config.population_size}  "
+                f"{'MAX' if self.ga_config.time_scale == 0 else str(self.ga_config.time_scale) + 'x'}",
                 f"leader speed {car.speed:5.1f}  cp {observed_agent.checkpoints_passed}/{len(self.track.checkpoints) - 1}",
                 f"time {observed_agent.elapsed:05.1f}s  collisions {observed_agent.collisions}",
                 "sensors " + " ".join(
