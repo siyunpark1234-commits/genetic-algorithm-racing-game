@@ -7,6 +7,7 @@ from pygame import Vector2
 from racing.car import Car, ControlInput
 from racing.config import GameConfig
 from racing.evaluation import CheckpointEvaluator
+from racing.ga_config import GeneticAlgorithmConfig
 from racing.geometry import segments_intersect
 from racing.sensors import ForwardSensorArray
 from racing.track import Track
@@ -16,6 +17,27 @@ class GeometryTests(unittest.TestCase):
     def test_segment_intersection(self) -> None:
         self.assertTrue(segments_intersect(Vector2(0, 0), Vector2(2, 2), Vector2(0, 2), Vector2(2, 0)))
         self.assertFalse(segments_intersect(Vector2(0, 0), Vector2(1, 0), Vector2(0, 2), Vector2(1, 2)))
+
+
+class GeneticConfigTests(unittest.TestCase):
+    def test_settings_parse_and_validate(self) -> None:
+        config = GeneticAlgorithmConfig.from_fields({
+            "mutation_rate": "0.08",
+            "weight_scale": "1.5",
+            "population_size": "40",
+            "elite_count": "5",
+        })
+        self.assertEqual(config.population_size, 40)
+        self.assertEqual(config.elite_count, 5)
+
+    def test_elite_count_must_be_smaller_than_population(self) -> None:
+        with self.assertRaises(ValueError):
+            GeneticAlgorithmConfig.from_fields({
+                "mutation_rate": "0.05",
+                "weight_scale": "1",
+                "population_size": "10",
+                "elite_count": "10",
+            })
 
 
 class RacingCoreTests(unittest.TestCase):
