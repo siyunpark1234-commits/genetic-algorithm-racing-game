@@ -55,6 +55,7 @@ class RacingGame:
             "collision_weight": str(config.collision_weight),
             "population_size": str(config.population_size),
             "elite_count": str(config.elite_count),
+            "render_all_agents": "true" if config.render_all_agents else "false",
         }
 
     def reset(self) -> None:
@@ -76,6 +77,10 @@ class RacingGame:
         ]
         return [(key, label, pygame.Rect(590, 175 + index * 51, 180, 36))
                 for index, (key, label) in enumerate(labels)]
+
+    @staticmethod
+    def _agent_view_toggle_rect() -> pygame.Rect:
+        return pygame.Rect(590, 481, 180, 36)
 
     def _start_ai_mode(self) -> None:
         try:
@@ -125,13 +130,17 @@ class RacingGame:
             self.config_error = ""
 
     def _handle_ai_setup_event(self, event: pygame.event.Event) -> None:
-        start_button = pygame.Rect(590, 505, 180, 48)
-        back_button = pygame.Rect(390, 505, 160, 48)
+        start_button = pygame.Rect(590, 535, 180, 48)
+        back_button = pygame.Rect(390, 535, 160, 48)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for key, _, rect in self._field_layout():
                 if rect.collidepoint(event.pos):
                     self.active_field = key
                     return
+            if self._agent_view_toggle_rect().collidepoint(event.pos):
+                current = self.ga_fields["render_all_agents"]
+                self.ga_fields["render_all_agents"] = "false" if current == "true" else "true"
+                return
             if start_button.collidepoint(event.pos):
                 self._start_ai_mode()
             elif back_button.collidepoint(event.pos):
@@ -216,13 +225,17 @@ class RacingGame:
             pygame.draw.rect(self.screen, (47, 111, 173) if key == self.active_field else (105, 112, 120), rect, 2, border_radius=5)
             value = self.font.render(self.ga_fields[key], True, (25, 30, 36))
             self.screen.blit(value, (rect.x + 10, rect.y + 6))
-        self._draw_button(pygame.Rect(390, 505, 160, 48), "BACK")
-        self._draw_button(pygame.Rect(590, 505, 180, 48), "START AI", emphasized=True)
+        toggle_label = self.font.render("Agent view", True, (35, 40, 46))
+        self.screen.blit(toggle_label, (315, 486))
+        show_all = self.ga_fields["render_all_agents"] == "true"
+        self._draw_button(self._agent_view_toggle_rect(), "ALL AGENTS" if show_all else "BEST ONLY", emphasized=show_all)
+        self._draw_button(pygame.Rect(390, 535, 160, 48), "BACK")
+        self._draw_button(pygame.Rect(590, 535, 180, 48), "START AI", emphasized=True)
         if self.config_error:
             error = self.small_font.render(self.config_error, True, (185, 48, 42))
-            self.screen.blit(error, error.get_rect(center=(self.config.width / 2, 580)))
+            self.screen.blit(error, error.get_rect(center=(self.config.width / 2, 605)))
         hint = self.small_font.render("Click a field to edit. Tab: next field. Enter: start.", True, (75, 80, 88))
-        self.screen.blit(hint, hint.get_rect(center=(self.config.width / 2, 630)))
+        self.screen.blit(hint, hint.get_rect(center=(self.config.width / 2, 650)))
 
     def _draw_race(self) -> None:
         self.screen.fill(self.config.background_color)
@@ -236,6 +249,10 @@ class RacingGame:
             car = self.car
             sensor_array = self.sensors
         readings = sensor_array.sense(car, self.track)
+        if observed_agent is not None and self.trainer is not None and self.ga_config.render_all_agents:
+            for agent in self.trainer.agents:
+                if agent is not observed_agent:
+                    agent.car.draw(self.screen, body_color=(95, 136, 165))
         if self.show_sensors:
             sensor_array.draw(self.screen, car, readings)
         car.draw(self.screen)
@@ -252,6 +269,7 @@ class RacingGame:
                 "fitness  completion "
                 f"{self.ga_config.completion_weight:.2f}  time {self.ga_config.time_weight:.2f}  "
                 f"collision {self.ga_config.collision_weight:.2f}",
+                "view  all agents" if self.ga_config.render_all_agents else "view  best agent only",
             ]
             if self.trainer.last_summary is not None:
                 lines.append(

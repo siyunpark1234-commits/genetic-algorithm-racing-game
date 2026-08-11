@@ -13,6 +13,7 @@ class GeneticAlgorithmConfig:
     collision_weight: float = 0.2
     population_size: int = 100
     elite_count: int = 10
+    render_all_agents: bool = False
 
     def validate(self) -> str | None:
         if not 0.0 <= self.mutation_rate <= 1.0:
@@ -38,6 +39,7 @@ class GeneticAlgorithmConfig:
                 collision_weight=float(fields["collision_weight"]),
                 population_size=int(fields["population_size"]),
                 elite_count=int(fields["elite_count"]),
+                render_all_agents=fields.get("render_all_agents", "false") == "true",
             )
         except ValueError as error:
             raise ValueError("Enter valid numeric values for every field.") from error

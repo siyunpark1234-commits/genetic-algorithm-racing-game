@@ -30,9 +30,11 @@ class GeneticConfigTests(unittest.TestCase):
             "collision_weight": "0.2",
             "population_size": "40",
             "elite_count": "5",
+            "render_all_agents": "true",
         })
         self.assertEqual(config.population_size, 40)
         self.assertEqual(config.elite_count, 5)
+        self.assertTrue(config.render_all_agents)
 
     def test_elite_count_must_be_smaller_than_population(self) -> None:
         with self.assertRaises(ValueError):

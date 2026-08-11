@@ -131,9 +131,9 @@ class Car:
             for sx, sy in ((1, 1), (1, -1), (-1, -1), (-1, 1))
         ]
 
-    def draw(self, surface: pygame.Surface) -> None:
+    def draw(self, surface: pygame.Surface, body_color: tuple[int, int, int] | None = None) -> None:
         points = [(round(p.x), round(p.y)) for p in self.corners()]
-        color = (235, 135, 45) if self.collision_intensity > 0 else (210, 55, 55)
+        color = body_color or ((235, 135, 45) if self.collision_intensity > 0 else (210, 55, 55))
         pygame.draw.polygon(surface, color, points)
         nose = self.position + self.forward * self.config.length * 0.35
         pygame.draw.circle(surface, (250, 235, 180), nose, 3)
