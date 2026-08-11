@@ -11,8 +11,8 @@ class GeneticAlgorithmConfig:
     completion_weight: float = 1.0
     time_weight: float = 0.3
     collision_weight: float = 0.2
-    population_size: int = 30
-    elite_count: int = 4
+    population_size: int = 100
+    elite_count: int = 10
 
     def validate(self) -> str | None:
         if not 0.0 <= self.mutation_rate <= 1.0:
