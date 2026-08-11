@@ -88,6 +88,21 @@ class EvolutionTests(unittest.TestCase):
                 "elite_count": "2",
             })
 
+    def test_fixed_seed_and_time_scale_are_preserved(self) -> None:
+        config = GeneticAlgorithmConfig.from_fields({
+            "mutation_rate": "0.05",
+            "completion_weight": "1",
+            "time_weight": "0.3",
+            "collision_weight": "0.2",
+            "population_size": "10",
+            "elite_count": "2",
+            "seed_mode": "fixed",
+            "seed_value": "123456",
+            "time_scale": "4",
+        })
+        self.assertEqual(config.seed, 123456)
+        self.assertEqual(config.time_scale, 4)
+
 
 class RacingCoreTests(unittest.TestCase):
     def setUp(self) -> None:

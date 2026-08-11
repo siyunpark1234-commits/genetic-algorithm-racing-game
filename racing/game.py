@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from enum import Enum, auto
 
 import pygame
@@ -7,7 +8,7 @@ import pygame
 from .car import Car, ControlInput
 from .config import GameConfig
 from .evaluation import CheckpointEvaluator, ProgressSnapshot
-from .evolution import EvolutionTrainer
+from .evolution import SIMULATION_DT, EvolutionTrainer
 from .ga_config import GeneticAlgorithmConfig
 from .sensors import ForwardSensorArray
 from .track import Track
@@ -40,6 +41,8 @@ class RacingGame:
         self.control_mode: str | None = None
         self.ga_config = GeneticAlgorithmConfig()
         self.trainer: EvolutionTrainer | None = None
+        self.run_seed: int | None = None
+        self.training_time_accumulator = 0.0
         self.ga_fields = self._config_to_fields(self.ga_config)
         self.active_field: str | None = None
         self.config_error = ""
@@ -56,6 +59,9 @@ class RacingGame:
             "population_size": str(config.population_size),
             "elite_count": str(config.elite_count),
             "render_all_agents": "true" if config.render_all_agents else "false",
+            "seed_mode": config.seed_mode,
+            "seed_value": "" if config.seed is None else str(config.seed),
+            "time_scale": str(config.time_scale),
         }
 
     def reset(self) -> None:
@@ -75,12 +81,24 @@ class RacingGame:
             ("population_size", "Population size"),
             ("elite_count", "Elite count"),
         ]
-        return [(key, label, pygame.Rect(590, 175 + index * 51, 180, 36))
+        return [(key, label, pygame.Rect(590, 130 + index * 42, 180, 32))
                 for index, (key, label) in enumerate(labels)]
 
     @staticmethod
     def _agent_view_toggle_rect() -> pygame.Rect:
-        return pygame.Rect(590, 481, 180, 36)
+        return pygame.Rect(590, 465, 180, 32)
+
+    @staticmethod
+    def _seed_mode_toggle_rect() -> pygame.Rect:
+        return pygame.Rect(590, 389, 180, 32)
+
+    @staticmethod
+    def _seed_value_rect() -> pygame.Rect:
+        return pygame.Rect(590, 427, 180, 32)
+
+    @staticmethod
+    def _time_scale_toggle_rect() -> pygame.Rect:
+        return pygame.Rect(590, 503, 180, 32)
 
     def _start_ai_mode(self) -> None:
         try:
@@ -91,7 +109,9 @@ class RacingGame:
         self.config_error = ""
         self.active_field = None
         self.control_mode = "ai"
-        self.trainer = EvolutionTrainer(self.track, self.ga_config)
+        self.run_seed = self.ga_config.seed if self.ga_config.seed_mode == "fixed" else secrets.randbits(63)
+        self.trainer = EvolutionTrainer(self.track, self.ga_config, seed=self.run_seed)
+        self.training_time_accumulator = 0.0
         self.current_screen = Screen.RACE
         self.reset()
 
@@ -130,16 +150,28 @@ class RacingGame:
             self.config_error = ""
 
     def _handle_ai_setup_event(self, event: pygame.event.Event) -> None:
-        start_button = pygame.Rect(590, 535, 180, 48)
-        back_button = pygame.Rect(390, 535, 160, 48)
+        start_button = pygame.Rect(590, 553, 180, 44)
+        back_button = pygame.Rect(390, 553, 160, 44)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for key, _, rect in self._field_layout():
                 if rect.collidepoint(event.pos):
                     self.active_field = key
                     return
+            if self._seed_mode_toggle_rect().collidepoint(event.pos):
+                self.ga_fields["seed_mode"] = "fixed" if self.ga_fields["seed_mode"] == "random" else "random"
+                self.active_field = None
+                return
+            if self._seed_value_rect().collidepoint(event.pos) and self.ga_fields["seed_mode"] == "fixed":
+                self.active_field = "seed_value"
+                return
             if self._agent_view_toggle_rect().collidepoint(event.pos):
                 current = self.ga_fields["render_all_agents"]
                 self.ga_fields["render_all_agents"] = "false" if current == "true" else "true"
+                return
+            if self._time_scale_toggle_rect().collidepoint(event.pos):
+                scales = (1, 2, 4, 8)
+                current_scale = int(self.ga_fields["time_scale"])
+                self.ga_fields["time_scale"] = str(scales[(scales.index(current_scale) + 1) % len(scales)])
                 return
             if start_button.collidepoint(event.pos):
                 self._start_ai_mode()
@@ -183,7 +215,11 @@ class RacingGame:
 
     def _update(self, dt: float) -> None:
         if self.control_mode == "ai" and self.trainer is not None:
-            self.trainer.advance(steps=4)
+            self.training_time_accumulator += dt * self.ga_config.time_scale
+            steps = int(self.training_time_accumulator / SIMULATION_DT)
+            if steps:
+                self.trainer.advance(steps=steps)
+                self.training_time_accumulator -= steps * SIMULATION_DT
             return
         control = self._keyboard_control() if self.control_mode == "direct" else ControlInput()
         self.car.update(control, dt)
@@ -215,8 +251,8 @@ class RacingGame:
         self.screen.fill((232, 236, 240))
         title = self.title_font.render("AI SETTINGS", True, (28, 31, 36))
         note = self.small_font.render("These settings control the genetic training run.", True, (75, 80, 88))
-        self.screen.blit(title, title.get_rect(center=(self.config.width / 2, 92)))
-        self.screen.blit(note, note.get_rect(center=(self.config.width / 2, 130)))
+        self.screen.blit(title, title.get_rect(center=(self.config.width / 2, 62)))
+        self.screen.blit(note, note.get_rect(center=(self.config.width / 2, 98)))
         for key, label, rect in self._field_layout():
             text = self.font.render(label, True, (35, 40, 46))
             self.screen.blit(text, (315, rect.y + 5))
@@ -225,17 +261,34 @@ class RacingGame:
             pygame.draw.rect(self.screen, (47, 111, 173) if key == self.active_field else (105, 112, 120), rect, 2, border_radius=5)
             value = self.font.render(self.ga_fields[key], True, (25, 30, 36))
             self.screen.blit(value, (rect.x + 10, rect.y + 6))
+        seed_mode_label = self.font.render("Seed mode", True, (35, 40, 46))
+        self.screen.blit(seed_mode_label, (315, 392))
+        fixed_seed = self.ga_fields["seed_mode"] == "fixed"
+        self._draw_button(self._seed_mode_toggle_rect(), "ENTER SEED" if fixed_seed else "RANDOM", emphasized=fixed_seed)
+        seed_label = self.font.render("Seed value", True, (35, 40, 46))
+        self.screen.blit(seed_label, (315, 430))
+        seed_rect = self._seed_value_rect()
+        seed_fill = (255, 255, 255) if fixed_seed else (218, 222, 226)
+        pygame.draw.rect(self.screen, seed_fill, seed_rect, border_radius=5)
+        pygame.draw.rect(self.screen, (47, 111, 173) if self.active_field == "seed_value" else (105, 112, 120), seed_rect, 2, border_radius=5)
+        seed_text = self.ga_fields["seed_value"] if fixed_seed else "Random on start"
+        seed_value = self.font.render(seed_text, True, (25, 30, 36) if fixed_seed else (100, 106, 112))
+        self.screen.blit(seed_value, (seed_rect.x + 10, seed_rect.y + 4))
         toggle_label = self.font.render("Agent view", True, (35, 40, 46))
-        self.screen.blit(toggle_label, (315, 486))
+        self.screen.blit(toggle_label, (315, 468))
         show_all = self.ga_fields["render_all_agents"] == "true"
         self._draw_button(self._agent_view_toggle_rect(), "ALL AGENTS" if show_all else "BEST ONLY", emphasized=show_all)
-        self._draw_button(pygame.Rect(390, 535, 160, 48), "BACK")
-        self._draw_button(pygame.Rect(590, 535, 180, 48), "START AI", emphasized=True)
+        speed_label = self.font.render("Training speed", True, (35, 40, 46))
+        self.screen.blit(speed_label, (315, 506))
+        speed = self.ga_fields["time_scale"]
+        self._draw_button(self._time_scale_toggle_rect(), f"{speed}x", emphasized=int(speed) > 1)
+        self._draw_button(pygame.Rect(390, 553, 160, 44), "BACK")
+        self._draw_button(pygame.Rect(590, 553, 180, 44), "START AI", emphasized=True)
         if self.config_error:
             error = self.small_font.render(self.config_error, True, (185, 48, 42))
-            self.screen.blit(error, error.get_rect(center=(self.config.width / 2, 605)))
+            self.screen.blit(error, error.get_rect(center=(self.config.width / 2, 620)))
         hint = self.small_font.render("Click a field to edit. Tab: next field. Enter: start.", True, (75, 80, 88))
-        self.screen.blit(hint, hint.get_rect(center=(self.config.width / 2, 650)))
+        self.screen.blit(hint, hint.get_rect(center=(self.config.width / 2, 665)))
 
     def _draw_race(self) -> None:
         self.screen.fill(self.config.background_color)
@@ -259,13 +312,14 @@ class RacingGame:
 
         if observed_agent is not None and self.trainer is not None:
             lines = [
-                f"AI  |  generation {self.trainer.generation}  live {self.trainer.active_count}/{self.ga_config.population_size}",
+                f"AI  |  generation {self.trainer.generation}  live {self.trainer.active_count}/{self.ga_config.population_size}  {self.ga_config.time_scale}x",
                 f"leader speed {car.speed:5.1f}  cp {observed_agent.checkpoints_passed}/{len(self.track.checkpoints) - 1}",
                 f"time {observed_agent.elapsed:05.1f}s  collisions {observed_agent.collisions}",
                 "sensors " + " ".join(
                     f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
                 ),
                 f"GA  pop {self.ga_config.population_size}  elite {self.ga_config.elite_count}  mutation {self.ga_config.mutation_rate:.2f}",
+                f"seed {self.run_seed if self.run_seed is not None else '--'}",
                 "fitness  completion "
                 f"{self.ga_config.completion_weight:.2f}  time {self.ga_config.time_weight:.2f}  "
                 f"collision {self.ga_config.collision_weight:.2f}",
@@ -289,15 +343,15 @@ class RacingGame:
             ]
         if car.collision_intensity > 0:
             lines.append(f"IMPACT {car.collision_intensity * 100:.0f}%")
-        panel = pygame.Rect(625, 405, 360, 155)
+        panel = pygame.Rect(620, 395, 370, 175)
         panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
         panel_surface.fill((248, 250, 252, 224))
         pygame.draw.rect(panel_surface, (125, 132, 140, 175), panel_surface.get_rect(), 1, border_radius=6)
         self.screen.blit(panel_surface, panel.topleft)
-        hud_x, hud_y = panel.x + 10, panel.y + 9
+        hud_x, hud_y = panel.x + 10, panel.y + 8
         for index, text in enumerate(lines):
             color = (205, 80, 20) if text.startswith("IMPACT") else (28, 31, 36)
-            self.screen.blit(self.telemetry_font.render(text, True, color), (hud_x, hud_y + index * 19))
+            self.screen.blit(self.telemetry_font.render(text, True, color), (hud_x, hud_y + index * 18))
 
     def _draw(self) -> None:
         if self.current_screen is Screen.MODE_SELECT:

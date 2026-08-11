@@ -117,6 +117,7 @@ class EvolutionTrainer:
         self.track = track
         self.settings = settings
         self.architecture = NetworkArchitecture()
+        self.seed = seed
         self.random = random.Random(seed)
         self.generation = 1
         self.population = [self._random_genome() for _ in range(settings.population_size)]
