@@ -31,7 +31,7 @@ class CarConfig:
 
 @dataclass(frozen=True)
 class SensorConfig:
-    angles_deg: tuple[float, ...] = (-90.0, -45.0, 0.0, 45.0, 90.0)
+    angles_deg: tuple[float, ...] = (-60.0, -30.0, 0.0, 30.0, 60.0)
     # Longer than the window diagonal, so a ray always reaches a track wall.
     max_distance: float = 1400.0
     step: float = 3.0
