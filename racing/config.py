@@ -8,9 +8,9 @@ class GameConfig:
     width: int = 1100
     height: int = 700
     fps: int = 60
-    background_color: tuple[int, int, int] = (30, 95, 42)
+    background_color: tuple[int, int, int] = (241, 243, 245)
     road_color: tuple[int, int, int] = (62, 65, 70)
-    road_edge_color: tuple[int, int, int] = (225, 225, 225)
+    road_edge_color: tuple[int, int, int] = (214, 217, 220)
 
 
 @dataclass(frozen=True)

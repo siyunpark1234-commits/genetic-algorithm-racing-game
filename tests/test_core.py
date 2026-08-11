@@ -65,6 +65,10 @@ class RacingCoreTests(unittest.TestCase):
         just_before = self.car.position + self.car.forward * (reading.distance - 0.1)
         self.assertTrue(self.track.is_drivable(just_before))
 
+    def test_diagonal_routes_are_separated_by_non_drivable_island(self) -> None:
+        self.assertTrue(self.track.is_drivable(Vector2(900, 247)))
+        self.assertFalse(self.track.is_drivable(Vector2(900, 194)))
+
 
 if __name__ == "__main__":
     unittest.main()

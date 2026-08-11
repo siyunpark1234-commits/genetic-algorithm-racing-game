@@ -80,9 +80,10 @@ class RacingGame:
         ]
         if self.car.collision_intensity > 0:
             lines.append(f"IMPACT {self.car.collision_intensity * 100:.0f}%")
+        hud_x, hud_y = 230, 155
         for index, text in enumerate(lines):
-            color = (255, 175, 75) if text.startswith("IMPACT") else (245, 245, 245)
-            self.screen.blit(self.font.render(text, True, color), (18, 16 + index * 28))
+            color = (205, 80, 20) if text.startswith("IMPACT") else (28, 31, 36)
+            self.screen.blit(self.font.render(text, True, color), (hud_x, hud_y + index * 28))
         pygame.display.flip()
 
     def run(self, max_frames: int | None = None) -> None:
