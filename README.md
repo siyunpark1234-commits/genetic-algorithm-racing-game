@@ -1,0 +1,43 @@
+# Pygame Racing – GA-ready prototype
+
+키보드로 먼저 주행해 볼 수 있고, 이후 유전 알고리즘 에이전트를 연결하기 쉽게
+구성한 2D 레이싱 프로토타입입니다.
+
+## 실행
+
+```bash
+python3 main.py
+```
+
+- `↑ / W`: 가속
+- `↓ / S`: 브레이크 / 후진
+- `← → / A D`: 조향
+- `R`: 시작 위치로 재시작
+- `V`: 센서 표시 전환
+- `Esc`: 종료
+
+의존성이 없다면 `python3 -m pip install -r requirements.txt`로 설치합니다.
+
+## 구조
+
+- `racing/car.py`: 물리 상태와 `ControlInput` (키보드/AI 공용 입력)
+- `racing/sensors.py`: 전방 5방향 거리 센서와 정규화 관측값
+- `racing/track.py`: 트랙 경계, 체크포인트, 선택적 중앙선 데이터
+- `racing/evaluation.py`: 평가 전략 인터페이스 및 체크포인트 평가기
+- `racing/game.py`: Pygame 표시와 게임 루프
+
+현재 평가는 순서가 있는 체크포인트 통과와 랩 완료를 사용합니다. 중앙선 기반 평가는
+`ProgressEvaluator` 인터페이스의 다른 구현으로 추가할 수 있으며, 트랙은 이미 중앙선
+샘플을 별도로 제공합니다. 이 덕분에 두 평가법을 차량/센서 코드 변경 없이 비교할 수
+있습니다.
+
+센서는 `-90°, -45°, 0°, 45°, 90°` 방향에서 인위적인 짧은 표시 제한 없이 실제
+트랙 경계까지 측정합니다. 벽을 얕게 스치면 진행 방향을 유지하며 감속하고, 벽 표면
+기준 45도 이상의 큰 각도로 충돌하면 정지합니다. 이때 후진해서 빠져나올 수 있습니다.
+
+## 검증
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 main.py --headless --frames 5
+```
