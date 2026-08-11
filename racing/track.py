@@ -93,7 +93,7 @@ class Track:
 
     @property
     def start_position(self) -> Vector2:
-        return Vector2(1025, 610)
+        return Vector2(900, 610)
 
     @property
     def start_heading_deg(self) -> float:
@@ -142,11 +142,11 @@ class Track:
     def _make_checkpoints(self, count: int) -> list[Checkpoint]:
         # Both diagonal choices are valid: there is no checkpoint between their split and merge.
         specs = [
-            ((1025, 610), (-1, 0)), ((790, 610), (-1, 0)), ((520, 610), (-1, 0)),
+            ((900, 610), (-1, 0)), ((790, 610), (-1, 0)), ((520, 610), (-1, 0)),
             ((270, 610), (-1, 0)), ((155, 500), (0, -1)), ((270, 410), (1, 0)),
             ((510, 410), (1, 0)), ((585, 340), (0, -1)), ((490, 270), (-1, 0)),
             ((260, 270), (-1, 0)), ((160, 170), (0, -1)), ((315, 88), (1, 0)),
-            ((570, 88), (1, 0)), ((720, 88), (1, 0)), ((1040, 460), (0, 1)),
+            ((570, 88), (1, 0)), ((680, 88), (1, 0)), ((1040, 460), (0, 1)),
             ((1040, 555), (0, 1)),
         ][:count]
         checkpoints: list[Checkpoint] = []
