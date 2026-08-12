@@ -67,18 +67,28 @@ class EvolutionTests(unittest.TestCase):
             trainer = EvolutionTrainer(track, settings, seed=1, results_root=Path(temp_dir))
             for index, agent in enumerate(trainer.agents):
                 agent.done = True
-                agent.result = EpisodeResult(float(index), index / 4, 10.0, index, False, index)
+                agent.result = EpisodeResult(float(index), index / 4, 10.0, index, index == 3, index)
             trainer._finish_generation()
             self.assertEqual(trainer.generation, 2)
             self.assertEqual(len(trainer.population), 4)
             self.assertEqual(len(trainer.agents), 4)
+            for index, agent in enumerate(trainer.agents):
+                agent.done = True
+                agent.result = EpisodeResult(float(index), index / 4, 9.0, 0, index == 3, index)
+            trainer._finish_generation()
             with trainer.results_exporter.summary_path.open(newline="", encoding="utf-8") as file:
                 summary_rows = list(csv.DictReader(file))
             with trainer.results_exporter.individuals_path.open(newline="", encoding="utf-8") as file:
                 individual_rows = list(csv.DictReader(file))
-        self.assertEqual(len(summary_rows), 1)
-        self.assertEqual(len(individual_rows), 4)
-        self.assertEqual(summary_rows[0]["completed_count"], "0")
+        self.assertEqual(len(summary_rows), 2)
+        self.assertEqual(len(individual_rows), 8)
+        self.assertEqual(summary_rows[0]["completed_count"], "1")
+        self.assertEqual(summary_rows[0]["first_completion_generation"], "1")
+        self.assertEqual(summary_rows[0]["first_collision_free_completion_generation"], "")
+        self.assertEqual(summary_rows[0]["fastest_completion_time_s"], "10.0")
+        self.assertEqual(summary_rows[0]["mean_collisions"], "1.5")
+        self.assertEqual(summary_rows[1]["first_completion_generation"], "1")
+        self.assertEqual(summary_rows[1]["first_collision_free_completion_generation"], "2")
         self.assertEqual(individual_rows[0]["rank"], "1")
 
     def test_agents_advance_into_a_new_generation(self) -> None:

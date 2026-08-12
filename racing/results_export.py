@@ -18,8 +18,9 @@ SUMMARY_COLUMNS = (
     "sensor_angles_deg", "episode_time_limit_s", "no_progress_limit_s",
     "checkpoint_count", "generation", "best_fitness", "mean_fitness",
     "best_completion_ratio", "mean_completion_ratio", "completed_count",
-    "completion_rate", "best_completion_time_s", "mean_completion_time_s",
-    "mean_collisions", "best_agent_collisions",
+    "completion_rate", "fastest_completion_time_s", "mean_completion_time_s",
+    "mean_collisions", "best_agent_collisions", "first_completion_generation",
+    "first_collision_free_completion_generation",
 )
 
 INDIVIDUAL_COLUMNS = (
@@ -55,6 +56,8 @@ class ResultsExporter:
         self.output_dir.mkdir(parents=True, exist_ok=False)
         self.summary_path = self.output_dir / "summary.csv"
         self.individuals_path = self.output_dir / "individuals.csv"
+        self.first_completion_generation: int | None = None
+        self.first_collision_free_completion_generation: int | None = None
         self._write_header(self.summary_path, SUMMARY_COLUMNS)
         self._write_header(self.individuals_path, INDIVIDUAL_COLUMNS)
 
@@ -100,7 +103,14 @@ class ResultsExporter:
         if not results or any(result is None for result in results):
             raise ValueError("Cannot export a generation before every agent has a result.")
         completed_results = [result for result in results if result is not None and result.completed]
+        collision_free_completed_results = [
+            result for result in completed_results if result.collisions == 0
+        ]
         confirmed_results = [result for result in results if result is not None]
+        if completed_results and self.first_completion_generation is None:
+            self.first_completion_generation = generation
+        if collision_free_completed_results and self.first_collision_free_completion_generation is None:
+            self.first_collision_free_completion_generation = generation
         best = confirmed_results[0]
         common = self._common_values()
         summary = {
@@ -112,13 +122,17 @@ class ResultsExporter:
             "mean_completion_ratio": sum(result.completion_ratio for result in confirmed_results) / len(confirmed_results),
             "completed_count": len(completed_results),
             "completion_rate": len(completed_results) / len(confirmed_results),
-            "best_completion_time_s": min((result.elapsed for result in completed_results), default=""),
+            "fastest_completion_time_s": min((result.elapsed for result in completed_results), default=""),
             "mean_completion_time_s": (
                 sum(result.elapsed for result in completed_results) / len(completed_results)
                 if completed_results else ""
             ),
             "mean_collisions": sum(result.collisions for result in confirmed_results) / len(confirmed_results),
             "best_agent_collisions": best.collisions,
+            "first_completion_generation": self.first_completion_generation or "",
+            "first_collision_free_completion_generation": (
+                self.first_collision_free_completion_generation or ""
+            ),
         }
         with self.summary_path.open("a", newline="", encoding="utf-8") as file:
             csv.DictWriter(file, fieldnames=SUMMARY_COLUMNS).writerow(summary)
