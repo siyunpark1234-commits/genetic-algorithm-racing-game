@@ -5,3 +5,4 @@ __pycache__/
 venv/
 AGENTS.md
 sources/
+results/

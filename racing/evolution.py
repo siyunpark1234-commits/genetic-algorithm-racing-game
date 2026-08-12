@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from pathlib import Path
 
 from .car import Car
 from .config import CarConfig, SensorConfig
 from .ga_config import GeneticAlgorithmConfig
 from .geometry import segments_intersect
 from .neural import NetworkArchitecture, NeuralNetwork
+from .results_export import ResultsExporter
 from .sensors import ForwardSensorArray
 from .track import Track
 
@@ -39,7 +41,8 @@ class GenerationSummary:
 
 
 class RacingAgent:
-    def __init__(self, genome: list[float], track: Track, architecture: NetworkArchitecture) -> None:
+    def __init__(self, individual_id: int, genome: list[float], track: Track, architecture: NetworkArchitecture) -> None:
+        self.individual_id = individual_id
         self.genome = genome
         self.track = track
         self.network = NeuralNetwork(genome, architecture)
@@ -117,7 +120,13 @@ class RacingAgent:
 class EvolutionTrainer:
     """Evaluates a full generation on one shared immutable track."""
 
-    def __init__(self, track: Track, settings: GeneticAlgorithmConfig, seed: int | None = None) -> None:
+    def __init__(
+        self,
+        track: Track,
+        settings: GeneticAlgorithmConfig,
+        seed: int | None = None,
+        results_root: Path | None = None,
+    ) -> None:
         self.track = track
         self.settings = settings
         self.architecture = NetworkArchitecture()
@@ -126,6 +135,14 @@ class EvolutionTrainer:
         self.generation = 1
         self.population = [self._random_genome() for _ in range(settings.population_size)]
         self.agents = self._new_agents(self.population)
+        self.results_exporter = ResultsExporter(
+            settings=settings,
+            seed=seed,
+            checkpoint_count=len(track.checkpoints) - 1,
+            episode_time_limit=EPISODE_TIME_LIMIT,
+            no_progress_limit=NO_PROGRESS_LIMIT,
+            results_root=results_root,
+        )
         self.last_summary: GenerationSummary | None = None
         self.best_ever: EpisodeResult | None = None
 
@@ -141,7 +158,10 @@ class EvolutionTrainer:
         return [self.random.uniform(-1.0, 1.0) for _ in range(self.architecture.genome_length)]
 
     def _new_agents(self, population: list[list[float]]) -> list[RacingAgent]:
-        return [RacingAgent(genome, self.track, self.architecture) for genome in population]
+        return [
+            RacingAgent(individual_id, genome, self.track, self.architecture)
+            for individual_id, genome in enumerate(population, start=1)
+        ]
 
     def advance(self, steps: int = 5) -> None:
         for _ in range(steps):
@@ -156,6 +176,7 @@ class EvolutionTrainer:
         best = results[0]
         mean = sum(result.fitness for result in results) / len(results)
         completed_count = sum(result.completed for result in results)
+        self.results_exporter.write_generation(self.generation, ranked)
         self.last_summary = GenerationSummary(
             self.generation, best.fitness, mean, best.completion_ratio, completed_count
         )

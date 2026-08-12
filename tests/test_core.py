@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import tempfile
 import unittest
+from pathlib import Path
 
 from pygame import Vector2
 
@@ -60,22 +63,32 @@ class EvolutionTests(unittest.TestCase):
     def test_generation_evolves_and_preserves_population_size(self) -> None:
         track = Track(GameConfig())
         settings = GeneticAlgorithmConfig(population_size=4, elite_count=1)
-        trainer = EvolutionTrainer(track, settings, seed=1)
-        for index, agent in enumerate(trainer.agents):
-            agent.done = True
-            agent.result = EpisodeResult(float(index), index / 4, 10.0, index, False, index)
-        trainer._finish_generation()
-        self.assertEqual(trainer.generation, 2)
-        self.assertEqual(len(trainer.population), 4)
-        self.assertEqual(len(trainer.agents), 4)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            trainer = EvolutionTrainer(track, settings, seed=1, results_root=Path(temp_dir))
+            for index, agent in enumerate(trainer.agents):
+                agent.done = True
+                agent.result = EpisodeResult(float(index), index / 4, 10.0, index, False, index)
+            trainer._finish_generation()
+            self.assertEqual(trainer.generation, 2)
+            self.assertEqual(len(trainer.population), 4)
+            self.assertEqual(len(trainer.agents), 4)
+            with trainer.results_exporter.summary_path.open(newline="", encoding="utf-8") as file:
+                summary_rows = list(csv.DictReader(file))
+            with trainer.results_exporter.individuals_path.open(newline="", encoding="utf-8") as file:
+                individual_rows = list(csv.DictReader(file))
+        self.assertEqual(len(summary_rows), 1)
+        self.assertEqual(len(individual_rows), 4)
+        self.assertEqual(summary_rows[0]["completed_count"], "0")
+        self.assertEqual(individual_rows[0]["rank"], "1")
 
     def test_agents_advance_into_a_new_generation(self) -> None:
         track = Track(GameConfig())
         settings = GeneticAlgorithmConfig(population_size=4, elite_count=1)
-        trainer = EvolutionTrainer(track, settings, seed=7)
-        trainer.advance(1000)
-        self.assertGreater(trainer.generation, 1)
-        self.assertIsNotNone(trainer.last_summary)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            trainer = EvolutionTrainer(track, settings, seed=7, results_root=Path(temp_dir))
+            trainer.advance(1000)
+            self.assertGreater(trainer.generation, 1)
+            self.assertIsNotNone(trainer.last_summary)
 
     def test_at_least_one_fitness_weight_is_required(self) -> None:
         with self.assertRaises(ValueError):
