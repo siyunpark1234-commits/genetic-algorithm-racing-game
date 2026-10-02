@@ -163,6 +163,13 @@ class RacingCoreTests(unittest.TestCase):
         self.assertEqual(len(values), 5)
         self.assertTrue(all(0.0 <= value <= 1.0 for value in values))
 
+    def test_scalar_road_lookup_matches_vector_lookup(self) -> None:
+        for x, y in ((0.1, 0.1), (155.2, 485.7), (500.0, 610.0), (1100.0, 700.0)):
+            self.assertEqual(
+                self.track.is_drivable(Vector2(x, y)),
+                self.track.is_drivable_xy(x, y),
+            )
+
     def test_ordered_checkpoint_advances(self) -> None:
         evaluator = CheckpointEvaluator()
         checkpoint = self.track.checkpoints[1]

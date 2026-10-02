@@ -128,7 +128,11 @@ class Track:
         return nearest
 
     def is_drivable(self, point: Vector2) -> bool:
-        x, y = round(point.x), round(point.y)
+        return self.is_drivable_xy(point.x, point.y)
+
+    def is_drivable_xy(self, x: float, y: float) -> bool:
+        """Fast scalar variant used by the training raycaster."""
+        x, y = round(x), round(y)
         return 0 <= x < self.config.width and 0 <= y < self.config.height and bool(self._drive_mask.get_at((x, y)))
 
     def wall_normal(self, point: Vector2) -> Vector2:
