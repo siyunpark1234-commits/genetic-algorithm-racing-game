@@ -89,6 +89,8 @@ class EvolutionTests(unittest.TestCase):
         self.assertEqual(summary_rows[0]["mean_collisions"], "1.5")
         self.assertEqual(summary_rows[1]["first_completion_generation"], "1")
         self.assertEqual(summary_rows[1]["first_collision_free_completion_generation"], "2")
+        self.assertEqual(summary_rows[0]["track_id"], "classic")
+        self.assertEqual(summary_rows[0]["track_label"], "Classic Split")
         self.assertEqual(individual_rows[0]["rank"], "1")
 
     def test_agent_id_selects_the_same_population_slot(self) -> None:
@@ -241,6 +243,23 @@ class RacingCoreTests(unittest.TestCase):
     def test_diagonal_routes_are_separated_by_non_drivable_island(self) -> None:
         self.assertTrue(self.track.is_drivable(Vector2(900, 293)))
         self.assertFalse(self.track.is_drivable(Vector2(900, 230)))
+
+
+class TrackLayoutTests(unittest.TestCase):
+    def test_each_selectable_track_has_a_valid_start_and_checkpoints(self) -> None:
+        for layout in Track.layouts():
+            with self.subTest(layout=layout.identifier):
+                track = Track(GameConfig(), layout.identifier)
+                self.assertEqual(track.layout_label, layout.label)
+                self.assertTrue(track.is_drivable(track.start_position))
+                self.assertGreaterEqual(len(track.checkpoints), 12)
+                for checkpoint in track.checkpoints:
+                    center = (checkpoint.inner + checkpoint.outer) / 2
+                    self.assertTrue(track.is_drivable(center))
+
+    def test_unknown_track_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            Track(GameConfig(), "not-a-track")
 
 
 if __name__ == "__main__":

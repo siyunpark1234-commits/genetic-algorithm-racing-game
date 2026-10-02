@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 SUMMARY_COLUMNS = (
     "experiment_id", "run_seed", "mutation_rate", "completion_weight",
-    "time_weight", "collision_weight", "population_size", "elite_count",
+    "time_weight", "collision_weight", "population_size", "elite_count", "track_id", "track_label",
     "sensor_angles_deg", "episode_time_limit_s", "no_progress_limit_s",
     "checkpoint_count", "generation", "best_fitness", "mean_fitness",
     "best_completion_ratio", "mean_completion_ratio", "completed_count",
@@ -25,7 +25,7 @@ SUMMARY_COLUMNS = (
 
 INDIVIDUAL_COLUMNS = (
     "experiment_id", "run_seed", "mutation_rate", "completion_weight",
-    "time_weight", "collision_weight", "population_size", "elite_count",
+    "time_weight", "collision_weight", "population_size", "elite_count", "track_id", "track_label",
     "sensor_angles_deg", "episode_time_limit_s", "no_progress_limit_s",
     "checkpoint_count", "generation", "rank", "individual_id", "fitness",
     "completion_ratio", "completed", "elapsed_time_s", "collisions",
@@ -41,6 +41,8 @@ class ResultsExporter:
         settings: GeneticAlgorithmConfig,
         seed: int | None,
         checkpoint_count: int,
+        track_id: str,
+        track_label: str,
         episode_time_limit: float,
         no_progress_limit: float,
         results_root: Path | None = None,
@@ -48,6 +50,8 @@ class ResultsExporter:
         self.settings = settings
         self.seed = seed
         self.checkpoint_count = checkpoint_count
+        self.track_id = track_id
+        self.track_label = track_label
         self.episode_time_limit = episode_time_limit
         self.no_progress_limit = no_progress_limit
         root = results_root or Path(__file__).resolve().parents[1] / "results"
@@ -65,6 +69,7 @@ class ResultsExporter:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         seed_label = str(self.seed) if self.seed is not None else "none"
         base = (
+            f"track{self.track_id}_"
             f"mut{self.settings.mutation_rate * 1000:03.0f}"
             f"_elite{self.settings.elite_count:02d}"
             f"_collision{self.settings.collision_weight * 100:03.0f}"
@@ -92,6 +97,8 @@ class ResultsExporter:
             "collision_weight": self.settings.collision_weight,
             "population_size": self.settings.population_size,
             "elite_count": self.settings.elite_count,
+            "track_id": self.track_id,
+            "track_label": self.track_label,
             "sensor_angles_deg": ";".join(f"{angle:g}" for angle in SensorConfig().angles_deg),
             "episode_time_limit_s": self.episode_time_limit,
             "no_progress_limit_s": self.no_progress_limit,

@@ -22,45 +22,110 @@ class RoadContact:
     penetration: float
 
 
+@dataclass(frozen=True)
+class TrackLayout:
+    identifier: str
+    label: str
+    centerline: tuple[tuple[float, float], ...]
+    start_position: tuple[float, float]
+    start_heading_deg: float
+    checkpoints: tuple[tuple[tuple[float, float], tuple[float, float]], ...]
+    shortcut: tuple[tuple[float, float], ...] = ()
+
+
+TRACK_LAYOUTS = (
+    TrackLayout(
+        "classic", "Classic Split", (
+            (1040, 610), (820, 610), (560, 610), (300, 610), (225, 609), (192, 598),
+            (168, 575), (156, 545), (155, 485), (164, 454), (186, 429), (218, 415),
+            (255, 410), (505, 410), (540, 402), (568, 382), (585, 353), (588, 324),
+            (577, 298), (553, 278), (520, 270), (248, 270), (215, 264), (188, 247),
+            (169, 220), (160, 188), (160, 153), (169, 126), (190, 104), (220, 92),
+            (255, 88), (790, 88), (820, 95), (842, 113), (1023, 286), (1038, 315),
+            (1040, 455), (1040, 565),
+        ), (900, 610), 180.0, (
+            ((900, 610), (-1, 0)), ((790, 610), (-1, 0)), ((520, 610), (-1, 0)),
+            ((270, 610), (-1, 0)), ((155, 500), (0, -1)), ((270, 410), (1, 0)),
+            ((510, 410), (1, 0)), ((585, 340), (0, -1)), ((490, 270), (-1, 0)),
+            ((260, 270), (-1, 0)), ((160, 170), (0, -1)), ((315, 88), (1, 0)),
+            ((570, 88), (1, 0)), ((680, 88), (1, 0)), ((1040, 460), (0, 1)),
+            ((1040, 555), (0, 1)),
+        ), ((720, 89), (750, 120), (1010, 420), (1040, 455)),
+    ),
+    TrackLayout(
+        "river", "River Run", (
+            (1030, 610), (800, 610), (560, 610), (340, 610), (210, 600), (145, 555),
+            (135, 480), (165, 430), (270, 402), (430, 402), (535, 425), (615, 462),
+            (700, 455), (760, 410), (770, 345), (740, 292), (650, 260), (510, 250),
+            (350, 250), (225, 225), (165, 180), (170, 125), (245, 90), (390, 88),
+            (530, 112), (690, 105), (835, 135), (960, 210), (1015, 315), (1015, 455),
+            (1010, 555),
+        ), (900, 610), 180.0, (
+            ((900, 610), (-1, 0)), ((660, 610), (-1, 0)), ((410, 610), (-1, 0)),
+            ((170, 560), (0, -1)), ((170, 445), (1, 0)), ((380, 402), (1, 0)),
+            ((595, 455), (1, 0)), ((760, 370), (0, -1)), ((650, 260), (-1, 0)),
+            ((430, 250), (-1, 0)), ((190, 200), (0, -1)), ((330, 88), (1, 0)),
+            ((580, 112), (1, 0)), ((805, 130), (1, 0)), ((1015, 300), (0, 1)),
+            ((1015, 525), (0, 1)),
+        ),
+    ),
+    TrackLayout(
+        "canyon", "Canyon Switchback", (
+            (1030, 610), (800, 610), (590, 610), (380, 610), (220, 590), (150, 540),
+            (145, 475), (190, 425), (290, 400), (430, 400), (520, 375), (550, 325),
+            (535, 280), (455, 250), (330, 245), (220, 230), (150, 190), (140, 135),
+            (190, 95), (330, 88), (480, 120), (610, 180), (720, 245), (830, 245),
+            (930, 200), (1010, 235), (1040, 310), (1010, 360), (875, 385), (770, 435),
+            (735, 500), (770, 550), (895, 575),
+        ), (900, 610), 180.0, (
+            ((900, 610), (-1, 0)), ((670, 610), (-1, 0)), ((450, 610), (-1, 0)),
+            ((190, 570), (0, -1)), ((180, 440), (1, 0)), ((400, 400), (1, 0)),
+            ((540, 340), (0, -1)), ((470, 255), (-1, 0)), ((250, 235), (-1, 0)),
+            ((145, 165), (0, -1)), ((285, 88), (1, 0)), ((535, 145), (1, 0)),
+            ((700, 230), (1, 0)), ((900, 215), (1, 0)), ((1030, 300), (0, 1)),
+            ((865, 390), (-1, 0)), ((750, 510), (0, 1)), ((880, 570), (1, 0)),
+        ),
+    ),
+)
+
+
 class Track:
     """Image-inspired road network with a primary centerline and a shortcut."""
 
-    def __init__(self, config: GameConfig, checkpoint_count: int = 16) -> None:
+    def __init__(self, config: GameConfig, layout_id: str = "classic") -> None:
         self.config = config
         self.road_width = 68.0
         self.road_half_width = self.road_width / 2
-        raw_centerline = [
-            Vector2(1040, 610), Vector2(820, 610), Vector2(560, 610), Vector2(300, 610),
-            Vector2(225, 609), Vector2(192, 598), Vector2(168, 575), Vector2(156, 545),
-            Vector2(155, 485), Vector2(164, 454), Vector2(186, 429), Vector2(218, 415),
-            Vector2(255, 410), Vector2(505, 410), Vector2(540, 402), Vector2(568, 382),
-            Vector2(585, 353), Vector2(588, 324), Vector2(577, 298), Vector2(553, 278),
-            Vector2(520, 270), Vector2(248, 270), Vector2(215, 264), Vector2(188, 247),
-            Vector2(169, 220), Vector2(160, 188), Vector2(160, 153), Vector2(169, 126),
-            Vector2(190, 104), Vector2(220, 92), Vector2(255, 88), Vector2(790, 88),
-            Vector2(820, 95), Vector2(842, 113), Vector2(1023, 286), Vector2(1038, 315),
-            Vector2(1040, 455), Vector2(1040, 565),
-        ]
-        raw_shortcut = [
-            Vector2(720, 89), Vector2(750, 120), Vector2(1010, 420), Vector2(1040, 455)
-        ]
+        self.layout = next((item for item in TRACK_LAYOUTS if item.identifier == layout_id), None)
+        if self.layout is None:
+            raise ValueError(f"Unknown track layout: {layout_id}")
+        self.layout_id = self.layout.identifier
+        self.layout_label = self.layout.label
+        raw_centerline = [Vector2(point) for point in self.layout.centerline]
+        raw_shortcut = [Vector2(point) for point in self.layout.shortcut]
         # Corner-cutting creates a continuous curve while preserving the
         # reference layout's long straights and broad hairpins.
         self.centerline = self._smooth_path(raw_centerline, closed=True)
-        self.shortcut = self._smooth_path(raw_shortcut, closed=False, iterations=2)
+        self.shortcut = self._smooth_path(raw_shortcut, closed=False, iterations=2) if raw_shortcut else []
         self._roads: list[tuple[list[Vector2], bool]] = [
             (self.centerline, True),
-            (self.shortcut, False),
         ]
+        if self.shortcut:
+            self._roads.append((self.shortcut, False))
         # Rendering gets denser samples than physics: visually smooth edges
         # without making every raycast inspect hundreds of extra segments.
         self._render_roads: list[tuple[list[Vector2], bool]] = [
             (self._smooth_path(raw_centerline, closed=True, iterations=4), True),
-            (self._smooth_path(raw_shortcut, closed=False, iterations=4), False),
         ]
+        if raw_shortcut:
+            self._render_roads.append((self._smooth_path(raw_shortcut, closed=False, iterations=4), False))
         self._drive_mask = self._build_drive_mask()
         self._segments = self._build_segments()
-        self.checkpoints = self._make_checkpoints(checkpoint_count)
+        self.checkpoints = self._make_checkpoints()
+
+    @classmethod
+    def layouts(cls) -> tuple[TrackLayout, ...]:
+        return TRACK_LAYOUTS
 
     @staticmethod
     def _smooth_path(points: list[Vector2], closed: bool, iterations: int = 2) -> list[Vector2]:
@@ -101,11 +166,11 @@ class Track:
 
     @property
     def start_position(self) -> Vector2:
-        return Vector2(900, 610)
+        return Vector2(self.layout.start_position)
 
     @property
     def start_heading_deg(self) -> float:
-        return 180.0
+        return self.layout.start_heading_deg
 
     @staticmethod
     def _nearest_on_segment(point: Vector2, start: Vector2, end: Vector2) -> Vector2:
@@ -154,16 +219,8 @@ class Track:
                 deepest = RoadContact(Vector2(point), normal, penetration)
         return deepest
 
-    def _make_checkpoints(self, count: int) -> list[Checkpoint]:
-        # Both diagonal choices are valid: there is no checkpoint between their split and merge.
-        specs = [
-            ((900, 610), (-1, 0)), ((790, 610), (-1, 0)), ((520, 610), (-1, 0)),
-            ((270, 610), (-1, 0)), ((155, 500), (0, -1)), ((270, 410), (1, 0)),
-            ((510, 410), (1, 0)), ((585, 340), (0, -1)), ((490, 270), (-1, 0)),
-            ((260, 270), (-1, 0)), ((160, 170), (0, -1)), ((315, 88), (1, 0)),
-            ((570, 88), (1, 0)), ((680, 88), (1, 0)), ((1040, 460), (0, 1)),
-            ((1040, 555), (0, 1)),
-        ][:count]
+    def _make_checkpoints(self) -> list[Checkpoint]:
+        specs = self.layout.checkpoints
         checkpoints: list[Checkpoint] = []
         for index, (position, direction) in enumerate(specs):
             center = Vector2(position)

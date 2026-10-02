@@ -139,6 +139,8 @@ class EvolutionTrainer:
             settings=settings,
             seed=seed,
             checkpoint_count=len(track.checkpoints) - 1,
+            track_id=track.layout_id,
+            track_label=track.layout_label,
             episode_time_limit=EPISODE_TIME_LIMIT,
             no_progress_limit=NO_PROGRESS_LIMIT,
             results_root=results_root,
