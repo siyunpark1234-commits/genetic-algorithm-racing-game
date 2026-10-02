@@ -91,6 +91,14 @@ class EvolutionTests(unittest.TestCase):
         self.assertEqual(summary_rows[1]["first_collision_free_completion_generation"], "2")
         self.assertEqual(individual_rows[0]["rank"], "1")
 
+    def test_agent_id_selects_the_same_population_slot(self) -> None:
+        track = Track(GameConfig())
+        settings = GeneticAlgorithmConfig(population_size=4, elite_count=1)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            trainer = EvolutionTrainer(track, settings, seed=3, results_root=Path(temp_dir))
+            self.assertEqual(trainer.agent_with_id(3).individual_id, 3)
+            self.assertIn(trainer.agent_with_id(99), trainer.agents)
+
     def test_agents_advance_into_a_new_generation(self) -> None:
         track = Track(GameConfig())
         settings = GeneticAlgorithmConfig(population_size=4, elite_count=1)

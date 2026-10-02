@@ -154,6 +154,13 @@ class EvolutionTrainer:
     def display_agent(self) -> RacingAgent:
         return max(self.agents, key=lambda agent: agent.provisional_fitness(self.settings))
 
+    def agent_with_id(self, individual_id: int) -> RacingAgent:
+        """Return one stable population slot, falling back to the current leader."""
+        return next(
+            (agent for agent in self.agents if agent.individual_id == individual_id),
+            self.display_agent,
+        )
+
     def _random_genome(self) -> list[float]:
         return [self.random.uniform(-1.0, 1.0) for _ in range(self.architecture.genome_length)]
 

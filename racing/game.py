@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import time
+from dataclasses import replace
 from enum import Enum, auto
 
 import pygame
@@ -44,6 +45,9 @@ class RacingGame:
         self.trainer: EvolutionTrainer | None = None
         self.run_seed: int | None = None
         self.training_time_accumulator = 0.0
+        self.experiment_menu_open = False
+        self.manual_race_active = False
+        self.observed_agent_id: int | None = None
         self.ga_fields = self._config_to_fields(self.ga_config)
         self.active_field: str | None = None
         self.config_error = ""
@@ -113,8 +117,72 @@ class RacingGame:
         self.run_seed = self.ga_config.seed if self.ga_config.seed_mode == "fixed" else secrets.randbits(63)
         self.trainer = EvolutionTrainer(self.track, self.ga_config, seed=self.run_seed)
         self.training_time_accumulator = 0.0
+        self.experiment_menu_open = False
+        self.manual_race_active = False
+        self.observed_agent_id = None
         self.current_screen = Screen.RACE
         self.reset()
+
+    @staticmethod
+    def _experiment_menu_button() -> pygame.Rect:
+        return pygame.Rect(1040, 14, 44, 38)
+
+    @staticmethod
+    def _runtime_view_button() -> pygame.Rect:
+        return pygame.Rect(770, 120, 280, 38)
+
+    @staticmethod
+    def _runtime_speed_button() -> pygame.Rect:
+        return pygame.Rect(770, 170, 280, 38)
+
+    @staticmethod
+    def _return_to_menu_button() -> pygame.Rect:
+        return pygame.Rect(770, 236, 280, 42)
+
+    def _set_runtime_config(self, **changes: object) -> None:
+        """Apply display/timing options without restarting the current run."""
+        self.ga_config = replace(self.ga_config, **changes)
+        if self.trainer is not None:
+            self.trainer.settings = self.ga_config
+
+    def _toggle_runtime_agent_view(self) -> None:
+        self._set_runtime_config(render_all_agents=not self.ga_config.render_all_agents)
+
+    def _cycle_runtime_speed(self) -> None:
+        scales = (1, 4, 16, 64, 0)
+        current_index = scales.index(self.ga_config.time_scale)
+        self._set_runtime_config(time_scale=scales[(current_index + 1) % len(scales)])
+
+    def _return_to_mode_menu(self) -> None:
+        """Stop the active run; already completed generations stay in its CSV folder."""
+        self.trainer = None
+        self.control_mode = None
+        self.run_seed = None
+        self.training_time_accumulator = 0.0
+        self.experiment_menu_open = False
+        self.manual_race_active = False
+        self.observed_agent_id = None
+        self.current_screen = Screen.MODE_SELECT
+        self.reset()
+
+    def _toggle_manual_race(self) -> None:
+        if self.control_mode != "ai" or self.trainer is None:
+            return
+        self.manual_race_active = not self.manual_race_active
+        if self.manual_race_active:
+            # Fix this AI population slot for the rest of its generation so
+            # the player races one identifiable car rather than a moving leader.
+            self.observed_agent_id = self.trainer.display_agent.individual_id
+            self.reset()
+        else:
+            self.observed_agent_id = None
+
+    def _observed_agent(self):
+        if self.trainer is None:
+            return None
+        if self.manual_race_active and self.observed_agent_id is not None:
+            return self.trainer.agent_with_id(self.observed_agent_id)
+        return self.trainer.display_agent
 
     def _select_next_field(self) -> None:
         keys = [key for key, _, _ in self._field_layout()]
@@ -196,7 +264,23 @@ class RacingGame:
                 self.ga_fields[self.active_field] += event.unicode
 
     def _handle_race_event(self, event: pygame.event.Event) -> None:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.control_mode == "ai":
+            if self._experiment_menu_button().collidepoint(event.pos):
+                self.experiment_menu_open = not self.experiment_menu_open
+                return
+            if self.experiment_menu_open:
+                if self._runtime_view_button().collidepoint(event.pos):
+                    self._toggle_runtime_agent_view()
+                elif self._runtime_speed_button().collidepoint(event.pos):
+                    self._cycle_runtime_speed()
+                elif self._return_to_menu_button().collidepoint(event.pos):
+                    self._return_to_mode_menu()
+                return
         if event.type != pygame.KEYDOWN:
+            return
+        if self.experiment_menu_open:
+            if event.key in (pygame.K_ESCAPE, pygame.K_m):
+                self.experiment_menu_open = False
             return
         if event.key == pygame.K_ESCAPE:
             self.running = False
@@ -204,6 +288,10 @@ class RacingGame:
             self.reset()
         elif event.key == pygame.K_v:
             self.show_sensors = not self.show_sensors
+        elif event.key == pygame.K_m and self.control_mode == "ai":
+            self.experiment_menu_open = True
+        elif event.key == pygame.K_p:
+            self._toggle_manual_race()
 
     def _keyboard_control(self) -> ControlInput:
         keys = pygame.key.get_pressed()
@@ -216,21 +304,34 @@ class RacingGame:
 
     def _update(self, dt: float) -> None:
         if self.control_mode == "ai" and self.trainer is not None:
-            if self.ga_config.time_scale == 0:
+            # A human driver needs real-time AI movement.  The manual race
+            # therefore uses 1x temporarily while preserving the selected
+            # speed for when the player leaves the mode.
+            effective_time_scale = 1 if self.manual_race_active else self.ga_config.time_scale
+            if effective_time_scale == 0:
                 # Spend nearly a full frame budget training, but return often
                 # enough to keep the window responsive to input and redraws.
                 deadline = time.perf_counter() + 0.020
                 while time.perf_counter() < deadline:
                     self.trainer.advance(steps=1)
             else:
-                self.training_time_accumulator += dt * self.ga_config.time_scale
+                self.training_time_accumulator += dt * effective_time_scale
                 steps = int(self.training_time_accumulator / SIMULATION_DT)
                 if steps:
                     self.trainer.advance(steps=steps)
                     self.training_time_accumulator -= steps * SIMULATION_DT
+            if self.manual_race_active:
+                self._update_player_car(dt)
             return
         control = self._keyboard_control() if self.control_mode == "direct" else ControlInput()
         self.car.update(control, dt)
+        collision_normal = self.car.push_out_of_track(self.track)
+        if collision_normal is not None:
+            self.car.resolve_collision(collision_normal)
+        self.progress = self.evaluator.update(self.car, self.track, dt)
+
+    def _update_player_car(self, dt: float) -> None:
+        self.car.update(self._keyboard_control(), dt)
         collision_normal = self.car.push_out_of_track(self.track)
         if collision_normal is not None:
             self.car.resolve_collision(collision_normal)
@@ -303,7 +404,8 @@ class RacingGame:
         self.screen.fill(self.config.background_color)
         self.track.draw(self.screen)
         if self.control_mode == "ai" and self.trainer is not None:
-            observed_agent = self.trainer.display_agent
+            observed_agent = self._observed_agent()
+            assert observed_agent is not None
             car = observed_agent.car
             sensor_array = observed_agent.sensors
         else:
@@ -311,19 +413,23 @@ class RacingGame:
             car = self.car
             sensor_array = self.sensors
         readings = sensor_array.sense(car, self.track)
-        if observed_agent is not None and self.trainer is not None and self.ga_config.render_all_agents:
+        if (observed_agent is not None and self.trainer is not None
+                and self.ga_config.render_all_agents and not self.manual_race_active):
             for agent in self.trainer.agents:
                 if agent is not observed_agent:
                     agent.car.draw(self.screen, body_color=(95, 136, 165))
         if self.show_sensors:
             sensor_array.draw(self.screen, car, readings)
         car.draw(self.screen)
+        if self.manual_race_active:
+            # The gold car belongs to the player and never affects GA fitness.
+            self.car.draw(self.screen, body_color=(244, 196, 44))
 
         if observed_agent is not None and self.trainer is not None:
             lines = [
                 f"AI  |  generation {self.trainer.generation}  live {self.trainer.active_count}/{self.ga_config.population_size}  "
                 f"{'MAX' if self.ga_config.time_scale == 0 else str(self.ga_config.time_scale) + 'x'}",
-                f"leader speed {car.speed:5.1f}  cp {observed_agent.checkpoints_passed}/{len(self.track.checkpoints) - 1}",
+                f"AI #{observed_agent.individual_id} speed {car.speed:5.1f}  cp {observed_agent.checkpoints_passed}/{len(self.track.checkpoints) - 1}",
                 f"time {observed_agent.elapsed:05.1f}s  collisions {observed_agent.collisions}",
                 "sensors " + " ".join(
                     f"{reading.angle_deg:+.0f}°:{reading.distance:.0f}" for reading in readings
@@ -335,6 +441,12 @@ class RacingGame:
                 f"collision {self.ga_config.collision_weight:.2f}",
                 "view  all agents" if self.ga_config.render_all_agents else "view  best agent only",
             ]
+            if self.manual_race_active:
+                player_cp = self.progress.checkpoints_passed % len(self.track.checkpoints)
+                lines.extend([
+                    f"PLAYER (gold) speed {self.car.speed:5.1f}  cp {player_cp}/{len(self.track.checkpoints) - 1}",
+                    "P: leave race  |  WASD or arrows: drive  |  AI is locked to this slot",
+                ])
             if self.trainer.last_summary is not None:
                 lines.append(
                     f"last gen best {self.trainer.last_summary.best_fitness:.3f}  "
@@ -353,7 +465,7 @@ class RacingGame:
             ]
         if car.collision_intensity > 0:
             lines.append(f"IMPACT {car.collision_intensity * 100:.0f}%")
-        panel = pygame.Rect(620, 395, 370, 175)
+        panel = pygame.Rect(620, 370, 410, 220)
         panel_surface = pygame.Surface(panel.size, pygame.SRCALPHA)
         panel_surface.fill((248, 250, 252, 224))
         pygame.draw.rect(panel_surface, (125, 132, 140, 175), panel_surface.get_rect(), 1, border_radius=6)
@@ -362,6 +474,30 @@ class RacingGame:
         for index, text in enumerate(lines):
             color = (205, 80, 20) if text.startswith("IMPACT") else (28, 31, 36)
             self.screen.blit(self.telemetry_font.render(text, True, color), (hud_x, hud_y + index * 18))
+        if self.control_mode == "ai":
+            self._draw_experiment_controls()
+
+    def _draw_experiment_controls(self) -> None:
+        menu_button = self._experiment_menu_button()
+        pygame.draw.rect(self.screen, (46, 116, 180), menu_button, border_radius=7)
+        for y in (23, 31, 39):
+            pygame.draw.line(self.screen, (250, 250, 250), (1051, y), (1073, y), 2)
+        if not self.experiment_menu_open:
+            return
+        panel = pygame.Rect(740, 70, 330, 230)
+        overlay = pygame.Surface(panel.size, pygame.SRCALPHA)
+        overlay.fill((247, 249, 252, 244))
+        pygame.draw.rect(overlay, (84, 94, 105, 210), overlay.get_rect(), 2, border_radius=10)
+        self.screen.blit(overlay, panel.topleft)
+        title = self.font.render("EXPERIMENT OPTIONS", True, (28, 31, 36))
+        self.screen.blit(title, (760, 84))
+        view_text = "ALL AGENTS" if self.ga_config.render_all_agents else "BEST ONLY"
+        self._draw_button(self._runtime_view_button(), f"VIEW: {view_text}", self.ga_config.render_all_agents)
+        speed = "MAX" if self.ga_config.time_scale == 0 else f"{self.ga_config.time_scale}x"
+        self._draw_button(self._runtime_speed_button(), f"SPEED: {speed}", self.ga_config.time_scale != 1)
+        self._draw_button(self._return_to_menu_button(), "RETURN TO MENU")
+        hint = self.small_font.render("M: close  |  P: race selected AI", True, (65, 72, 80))
+        self.screen.blit(hint, (775, 285))
 
     def _draw(self) -> None:
         if self.current_screen is Screen.MODE_SELECT:
